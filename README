@@ -1,0 +1,54 @@
+IDA* Puzzle solver assignment for the Parallel Programming Practical(PPP)
+
+This template contains everything required for the java assignment (provided you have an internet connection).
+
+Content:
+
+- bin/run-java
+            script to run java applications (with correct classpath)
+            start from the same dir as this README.
+
+- bin/ipl-server
+            script to start an "ipl-server" (see IPL documentation
+            for more info). Note: this script will only work once you ran "./gradlew".
+
+- bin/ibis-run
+            script to start an ibis application on the local host.
+            This script starts an ipl-server, and instances of the application.
+
+- bin/ibis-prun
+            script to start an ibis application on DAS5 (to be used with prun).
+            This script also starts an ipl-server, so you don't have to yourself.
+
+- bin/sanity-check
+  bin/reference.out
+            script to compare output of your ipl version with the reference output.
+
+- build.gradle
+  gradle
+  gradlew
+  gradlew.bat
+            build mechanism to build your application using Gradle.
+            Build your application using the command "./gradlew".
+            This will download everything required to build and run IPL apps.
+            It "rewrites" the jar file to optimize serialization performance.
+
+            Also contains a "submit" target ("./gradlew submit") to create
+            a zip file suitable for submission.
+
+- docs
+            put your documentation here.
+
+- ibis
+            directory containing IPL configuration.
+
+- ibis.properties
+            settings file for Ibis. Please don't change it.
+
+- log4j.properties
+            settings file for Log4J (see http://logging.apache.org)
+            needed for the IPL, automatically used by scripts in bin.
+
+- src
+            source of the sequential application. Your code should
+            also go here (empty packages provided).

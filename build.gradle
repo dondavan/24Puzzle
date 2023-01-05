@@ -1,0 +1,68 @@
+plugins {
+    id 'java'
+}
+
+repositories {
+    jcenter()
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs 'src'
+        }
+    }
+}
+
+dependencies {
+    compile 'nl.junglecomputing.ipl:ipl:2.3.3'
+    compile 'nl.junglecomputing.ipl:ibis-util:2.3.3'
+    compile 'org.slf4j:slf4j-api:1.7.21'
+    compile 'nl.junglecomputing.ipl:ipl-impl-smartsockets:2.3.3'
+    compile 'nl.junglecomputing.ipl:ipl-support:2.3.3'
+    compile 'org.slf4j:slf4j-log4j12:1.7.2'
+}
+
+tasks.withType(Jar) {
+    destinationDir = file("$rootDir/lib")
+}
+
+task copyDeps(type: Copy) {
+    def destination = project.file("$rootDir/lib")
+    from configurations.runtime
+    into destination
+}
+
+task submit(type: Zip) {
+    from("src") {
+        include "**/*.java"
+        into "src"
+    }
+
+    from("docs") {
+        include "**/*.pdf"
+        into "docs"
+    }
+
+    from(".") {
+        include "build.gradle"
+        into "."
+        }
+    archiveFileName = "submit.zip"
+    destinationDirectory = file("$rootDir")
+
+}
+
+/*
+compileJava.doLast {
+    javaexec {
+    main = 'ibis.compile.Ibisc'
+    classpath = sourceSets.main.runtimeClasspath
+    workingDir = "$buildDir/classes/java/main"
+    args = [ "." ]
+    }
+}
+*/
+
+defaultTasks 'clean', 'copyDeps', 'assemble'
+

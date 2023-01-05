@@ -1,0 +1,97 @@
+#!/bin/bash
+
+#script used to check sanity of output for the Java assignment of the
+#parallel programming practical. Please don't submit assignments which don't
+#make it through this test. Passing this test does not mean you passed 
+#the practical :)
+
+ARGUMENTS=""
+
+echo Building application using Gradle
+./gradlew
+
+
+echo Running sequential version with default parameters...
+if ! prun -v -1 -np 1 bin/java-run ida.sequential.Ida $ARGUMENTS >sequential.out 2>sequential.err ;
+then
+	echo "Running sequential version with default parameters failed"
+	exit 1
+fi
+
+
+echo Running ipl version with default parameters...
+if ! prun -v -1 -np 2 bin/ibis-prun ida.ipl.Ida $ARGUMENTS ;
+then
+	echo "Running ipl version with default parameters failed"
+	exit 1
+fi
+
+cat out.0 out.1 > ipl.out
+cat err.0 err.1 > ipl.err
+
+echo Checking output...
+
+for VERSION in sequential ipl
+do
+
+	DIFF=`diff bin/reference.out $VERSION.out`
+
+	if [ -z "$DIFF" ]; then
+		echo "$VERSION: Output ok"
+	else
+		echo "$VERSION: Invalid output"
+		exit 1
+	fi
+
+	if grep "ida took" $VERSION.err --quiet ; then
+		echo "$VERSION: Time print found"
+	else
+		echo "$VERSION: No time print found"
+		exit 1
+	fi
+
+done
+
+ARGUMENTS="--file bin/input-103"
+
+echo Running sequential version with file input...
+if ! prun -v -1 -np 1 bin/java-run ida.sequential.Ida $ARGUMENTS >sequential-file.out 2>sequential-file.err ;
+then
+	echo "Running sequential version with file input failed"
+	exit 1
+fi
+
+
+echo Running ipl version with file input...
+if ! prun -v -1 -np 2 bin/ibis-prun ida.ipl.Ida $ARGUMENTS ;
+then
+	echo "Running ipl version with file input failed"
+	exit 1
+fi
+
+cat out.0 out.1 > ipl-file.out
+cat err.0 err.1 > ipl-file.err
+
+echo Checking output...
+
+for VERSION in sequential-file ipl-file
+do
+
+	DIFF=`diff bin/reference-file.out $VERSION.out`
+
+	if [ -z "$DIFF" ]; then
+		echo "$VERSION: Output ok"
+	else
+		echo "$VERSION: Invalid output"
+		exit 1
+	fi
+
+	if grep "ida took" $VERSION.err --quiet ; then
+		echo "$VERSION: Time print found"
+	else
+		echo "$VERSION: No time print found"
+		exit 1
+	fi
+
+done
+

@@ -1,0 +1,8 @@
+support.version=support-2.3.3
+implementation.version=impl-2.3.3
+implementations=smartsockets
+
+#smartsockets
+smartsockets.starter.class=ibis.ipl.impl.smartsockets.SmartSocketsIbisStarter
+smartsockets.ipl.version=2.3.3
+smartsockets.version=smartsockets-2.3.3

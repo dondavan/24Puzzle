@@ -1,0 +1,34 @@
+#!/bin/sh
+# This script can be used for running ibis applications on a single machine.
+# Usage is: ibis-run <numInstances> className> <programArgs>
+# Output is directed to files out.<instanceNo>, error output is directed to files err.<instanceNo>.
+# The output and error output of the ipl server is directed to ipl-server.out
+
+DIR=`dirname $0`
+
+NHOSTS=$1
+shift
+POOL=pool$$
+
+# Start an ipl-server
+$DIR/ipl-server --events < /dev/null > ipl-server.out 2>&1 &
+SERVERPID=$!
+
+for i in `seq 1 $NHOSTS`
+do
+    $DIR/java-run \
+	-Dibis.pool.size=$NHOSTS \
+	"-Dibis.server.address=localhost" \
+	-Dibis.pool.name="$POOL" \
+	"$@" > out.$i 2>err.$i &
+    PID=$!
+    case $i in
+        1)  PID1=$PID
+            ;;
+    esac
+done
+
+wait $PID1
+# Kill server 10 seconds after the first java-run terminates
+sleep 10
+kill -9 $SERVERPID > /dev/null 2>&1
