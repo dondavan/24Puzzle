@@ -1,6 +1,8 @@
 package ida.ipl;
 
 
+import ibis.ipl.examples.Hello;
+
 final class Ida {
 
     static int expansions;
@@ -137,6 +139,12 @@ final class Ida {
                 System.err.println("Cannot save board: " + e);
             }
             System.exit(0);
+        }
+
+        try {
+            new Ibis().run();
+        } catch (Exception e) {
+            e.printStackTrace(System.err);
         }
 
         System.out.println("Running IDA*, initial board:");
