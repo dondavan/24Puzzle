@@ -66,7 +66,7 @@ final class Ida {
         int bound = board.distance();
         int solutions;
 
-        System.out.print("Try bound ");
+        System.out.println("Try bound ");
         System.out.flush();
 
         do {
