@@ -60,6 +60,12 @@ final class Ida {
         return result;
     }
 
+    private static BoardCache generateJob(Board board){
+        BoardCache cache = new BoardCache();
+
+        return cache;
+    }
+
     private static void solve(Board board, boolean useCache) {
         BoardCache cache = null;
         if (useCache) {
@@ -147,8 +153,8 @@ final class Ida {
             e.printStackTrace(System.err);
         }
 
-        System.out.println("Running IDA*, initial board:");
-        System.out.println(initialBoard);
+        System.err.println("Running IDA*, initial board:");
+        System.err.println(initialBoard);
 
         long start = System.currentTimeMillis();
         solve(initialBoard, cache);
