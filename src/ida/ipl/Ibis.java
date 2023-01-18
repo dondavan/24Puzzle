@@ -5,7 +5,7 @@ import ibis.ipl.*;
 import java.io.IOException;
 import java.util.ArrayList;
 
-public class Ibis implements MessageUpcall{
+public class Ibis implements MessageUpcall, RegistryEventHandler{
 
     /**
      *  Ibis properties
@@ -14,14 +14,15 @@ public class Ibis implements MessageUpcall{
 
     PortType portType = new PortType(PortType.COMMUNICATION_RELIABLE,
             PortType.SERIALIZATION_DATA, PortType.RECEIVE_AUTO_UPCALLS,
-            PortType.CONNECTION_ONE_TO_MANY);
+            PortType.CONNECTION_MANY_TO_MANY);
 
     IbisCapabilities ibisCapabilities = new IbisCapabilities(
-            IbisCapabilities.ELECTIONS_STRICT);
+            IbisCapabilities.CLOSED_WORLD,
+            IbisCapabilities.ELECTIONS_STRICT,
+            IbisCapabilities.MEMBERSHIP_TOTALLY_ORDERED);
 
     /** Set to true when server received message. */
     boolean finished = false;
-
 
     public void upcall(ReadMessage message) throws IOException {
         String s = message.readString();
@@ -34,55 +35,40 @@ public class Ibis implements MessageUpcall{
         notifyAll();
     }
 
+    public void joined(IbisIdentifier joinedIbis) { System.err.println(joinedIbis);
+    }
+    public void died(IbisIdentifier corpse) {
+        System.err.println(corpse);
+    }
+
+    public void gotSignal(String signal, IbisIdentifier source) {
+
+    }
+
+    public void left(IbisIdentifier leftIbis) {
+        System.err.println(leftIbis);
+    }
+
+    public void electionResult(String electionName, IbisIdentifier winner) { // NOTHING
+    }
+    public void poolClosed() { // NOTHING
+    }
+    public void poolTerminated(IbisIdentifier source) { // NOTHING
+    }
+
     /**
      * Ibis server, responsible for distributing board branch to client
      * @param myIbis
      * @throws IOException
      */
-    private void server(ibis.ipl.Ibis myIbis, SendPort sender) throws IOException {
+    private void server(ibis.ipl.Ibis myIbis) throws IOException {
 
-        // Send the message.
-        WriteMessage w = sender.newMessage();
-        w.writeString("Hi there");
-        w.finish();
-
-        // Close ports.
-        sender.close();
-    }
-
-    private void serverConnect(ibis.ipl.Ibis myIbis, IbisIdentifier client) throws IOException {
-
-        // Create a send port for sending requests and connect.
-        SendPort sender = myIbis.createSendPort(portType);
-        sender.connect(client, "FromServer");
-        
-    }
-
-    private ReceivePort clientInit(ibis.ipl.Ibis myIbis)  throws IOException {
-
-        // Create a receive port and enable connections.
-        ReceivePort receiver = myIbis.createReceivePort(portType, "FromServer",
+        // Create a receive port, pass ourselves as the message upcall
+        // handler
+        ReceivePort receiver = myIbis.createReceivePort(portType, "server",
                 this);
+        // enable connections
         receiver.enableConnections();
-
-        // enable upcalls
-        receiver.enableMessageUpcalls();
-
-        return  receiver;
-    }
-
-    /**
-     * Ibis client, receive work from server and explore board
-     * @param myIbis
-     * @throws IOException
-     */
-    private void client(ibis.ipl.Ibis myIbis) throws IOException {
-
-    // Create a receive port and enable connections.
-        ReceivePort receiver = myIbis.createReceivePort(portType, "FromServer",
-                this);
-        receiver.enableConnections();
-
         // enable upcalls
         receiver.enableMessageUpcalls();
 
@@ -98,7 +84,26 @@ public class Ibis implements MessageUpcall{
 
         // Close receive port.
         receiver.close();
+    }
+    /**
+     * Ibis client, receive work from server and explore board
+     * @param myIbis
+     * @param server
+     * @throws IOException
+     */
+    private void client(ibis.ipl.Ibis myIbis, IbisIdentifier server) throws IOException {
 
+        // Create a send port for sending requests and connect.
+        SendPort sender = myIbis.createSendPort(portType);
+        sender.connect(server, "server");
+
+        // Send the message.
+        WriteMessage w = sender.newMessage();
+        w.writeString("Hi there");
+        w.finish();
+
+        // Close ports.
+        sender.close();
     }
 
     /**
@@ -108,26 +113,18 @@ public class Ibis implements MessageUpcall{
     public void run() throws Exception {
         // Create an ibis instance.
         ibis.ipl.Ibis ibis = IbisFactory.createIbis(ibisCapabilities, null, portType);
-
         // Elect a server
         IbisIdentifier server = ibis.registry().elect("Server");
-
-        System.err.println("Server is " + server);
-        ArrayList<ReceivePortIdentifier> receivePortIdentifiers = new ArrayList<ReceivePortIdentifier>();
-
+        ibis.registry().waitUntilPoolClosed();
+        IbisIdentifier[] joinedIbises = ibis.registry().joinedIbises();
+        //IbisIdentifier[] as = ibis.registry().joinedIbises();
         // If I am the server, run server, else run client.
         if (server.equals(ibis.identifier())) {
             server(ibis);
         } else {
-            System.err.println(ibis.identifier());
-            ReceivePort receivePort= clientInit(ibis);
-            receivePortIdentifiers.add(receivePort.identifier());
-            client(receivePort);
+            client(ibis, server);
         }
-
-        if (server.equals(ibis.identifier())) {
-            server(ibis);
-        }
+        for(IbisIdentifier ibisIdentifier:joinedIbises)System.err.println(ibisIdentifier);
         // End ibis.
         ibis.end();
     }

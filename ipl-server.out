@@ -1,13 +1,18 @@
-Ibis server running on 192.168.179.18-8888#0e.67.24.8d.55.7e.00.00.85.ef.8b.16.87.9e.03.a3~thhugh+22
+Ibis server running on 192.168.0.103-8888#5e.b6.8a.9d.55.7e.00.00.4c.ea.23.e7.08.55.19.04~thhugh+22
 List of Services:
     Central Registry service on virtual port 302
     Management service on virtual port 304
     Bootstrap service on virtual port 303
-Known hubs now: 192.168.179.18-8888#0e.67.24.8d.55.7e.00.00.85.ef.8b.16.87.9e.03.a3~thhugh+22
-17:22:09 Central Registry: creating new pool: "pool82731"
-17:22:09 Central Registry: (Ibis 0, location localhost) joined pool "pool82731" now 1 members
-17:22:09 Central Registry: (Ibis 1, location localhost) joined pool "pool82731" now 2 members
-17:22:09 Central Registry: (Ibis 0, location localhost) won election "Server" in pool "pool82731"
-17:22:09 Central Registry: (Ibis 1, location localhost) left pool "pool82731" now 1 members
-17:22:09 Central Registry: (Ibis 0, location localhost) left pool "pool82731" now 0 members
-17:22:09 Central Registry: pool "pool82731" ended
+Known hubs now: 192.168.0.103-8888#5e.b6.8a.9d.55.7e.00.00.4c.ea.23.e7.08.55.19.04~thhugh+22
+01:00:44 Central Registry: creating new pool: "pool95302"
+01:00:44 Central Registry: (Ibis 0, location localhost) joined pool "pool95302" now 1 members
+01:00:44 Central Registry: (Ibis 1, location localhost) joined pool "pool95302" now 2 members
+01:00:44 Central Registry: (Ibis 2, location localhost) joined pool "pool95302" now 3 members
+01:00:44 Central Registry: (Ibis 3, location localhost) joined pool "pool95302" now 4 members
+01:00:44 Central Registry: pool "pool95302" now closed
+01:00:44 Central Registry: (Ibis 0, location localhost) won election "Server" in pool "pool95302"
+01:00:44 Central Registry: (Ibis 2, location localhost) left pool "pool95302" now 3 members
+01:00:44 Central Registry: (Ibis 1, location localhost) left pool "pool95302" now 2 members
+01:00:44 Central Registry: (Ibis 3, location localhost) left pool "pool95302" now 1 members
+01:00:44 Central Registry: (Ibis 0, location localhost) left pool "pool95302" now 0 members
+01:00:44 Central Registry: pool "pool95302" ended
