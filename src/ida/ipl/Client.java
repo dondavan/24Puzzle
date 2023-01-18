@@ -13,8 +13,10 @@ public class Client implements MessageUpcall{
      *  Ibis properties
      **/
 
-    PortType portType = new PortType(PortType.COMMUNICATION_RELIABLE,
-            PortType.SERIALIZATION_DATA, PortType.RECEIVE_AUTO_UPCALLS,
+    PortType portType = new PortType(
+            PortType.COMMUNICATION_RELIABLE,
+            PortType.SERIALIZATION_DATA,
+            PortType.RECEIVE_AUTO_UPCALLS,
             PortType.CONNECTION_ONE_TO_MANY);
 
     private ibis.ipl.Ibis ibis;
@@ -26,6 +28,7 @@ public class Client implements MessageUpcall{
         // Create an ibis instance.
         this.ibis = ibis;
         ibis.registry().waitUntilPoolClosed();
+        System.err.println("CLient "+ibis.identifier());
         receiverConnect();
         System.err.println("Waiting Msg");
         receiveMessage();

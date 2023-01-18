@@ -3,68 +3,62 @@ package ida.ipl;
 import ibis.ipl.*;
 
 import java.io.IOException;
+import java.util.ArrayList;
 
 /**
  * Ibis server, responsible for distributing board branch to client
  */
-public class Server implements MessageUpcall {
+public class Server {
 
     /**
      *  Ibis properties
      **/
 
-    PortType portType = new PortType(PortType.COMMUNICATION_RELIABLE,
-            PortType.SERIALIZATION_DATA, PortType.RECEIVE_AUTO_UPCALLS,
+    PortType portType = new PortType(
+            PortType.COMMUNICATION_RELIABLE,
+            PortType.SERIALIZATION_DATA,
+            PortType.RECEIVE_AUTO_UPCALLS,
             PortType.CONNECTION_ONE_TO_MANY);
 
     private ibis.ipl.Ibis ibis;
-    private boolean finished = false;
-    private SendPort sender;
+    private ArrayList<SendPort> sendPorts;
 
     public Server(ibis.ipl.Ibis ibis) throws Exception{
 
         // Create an ibis instance.
         this.ibis = ibis;
+        sendPorts = new ArrayList<SendPort>();
         ibis.registry().waitUntilPoolClosed();
         IbisIdentifier[] joinedIbises = ibis.registry().joinedIbises();
-
-        System.err.println(ibis.identifier());
+        System.err.println("Server "+ibis.identifier());
         senderConnect(joinedIbises);
-        System.err.println(ibis.identifier());
         System.err.println("Sending Msg");
         sendMessage();
         System.err.println("Msg sent");
         ibis.end();
     }
 
-    public void upcall(ReadMessage message) throws IOException {
-        String s = message.readString();
-        System.err.println("Received string: " + s);
-        setFinished();
-    }
-
-    synchronized void setFinished() {
-        finished = true;
-        notifyAll();
-    }
-
     private void senderConnect(IbisIdentifier[] ibisIdentifiers) throws Exception {
-        sender = ibis.createSendPort(portType);
         for(IbisIdentifier identifier:ibisIdentifiers){
-            System.err.println(identifier);
-            sender.connect(identifier, "fromServer");
-            System.err.println(sender.name());
+            if(!identifier.equals(ibis.identifier())){
+                SendPort sendPort = ibis.createSendPort(portType);
+                sendPort.connect(identifier, "fromServer");
+                System.err.println(sendPort.name() + "  "  + identifier);
+                sendPorts.add(sendPort);
+            }
         }
     }
 
     private void sendMessage() throws IOException {
         // Send the message.
-        WriteMessage w = sender.newMessage();
-        w.writeString("Hi there");
-        w.finish();
+        for (SendPort sendPort :sendPorts){
+            WriteMessage w = sendPort.newMessage();
+            w.writeString("Hi there");
+            w.finish();
 
-        // Close ports.
-        sender.close();
+            // Close ports.
+            sendPort.close();
+        }
     }
 
 }
