@@ -1,11 +1,36 @@
 package ida.ipl;
 
 
-import ibis.ipl.examples.Hello;
+import ibis.ipl.IbisCapabilities;
+import ibis.ipl.IbisFactory;
+import ibis.ipl.IbisIdentifier;
+import ibis.ipl.PortType;
+
+import java.util.ArrayList;
+import java.util.List;
 
 final class Ida {
 
     static int expansions;
+
+    static PortType ONE2MANY = new PortType(
+            PortType.COMMUNICATION_RELIABLE,
+            PortType.SERIALIZATION_DATA,
+            PortType.RECEIVE_AUTO_UPCALLS,
+            PortType.CONNECTION_ONE_TO_MANY);
+
+    static PortType MANY2ONE = new PortType(
+            PortType.COMMUNICATION_RELIABLE,
+            PortType.SERIALIZATION_DATA,
+            PortType.RECEIVE_AUTO_UPCALLS,
+            PortType.CONNECTION_MANY_TO_ONE);
+
+    static IbisCapabilities ibisCapabilities = new IbisCapabilities(
+            IbisCapabilities.CLOSED_WORLD,
+            IbisCapabilities.ELECTIONS_STRICT,
+            IbisCapabilities.MEMBERSHIP_TOTALLY_ORDERED,
+            IbisCapabilities.SIGNALS);
+
 
     /**
      * expands this board into all possible positions, and returns the number of
@@ -60,12 +85,6 @@ final class Ida {
         return result;
     }
 
-    private static BoardCache generateJob(Board board){
-        BoardCache cache = new BoardCache();
-
-        return cache;
-    }
-
     private static void solve(Board board, boolean useCache) {
         BoardCache cache = null;
         if (useCache) {
@@ -97,6 +116,20 @@ final class Ida {
         System.out.println("\nresult is " + solutions + " solutions of "
                 + board.bound() + " steps");
 
+    }
+
+    public static void run(Board board, int bound) throws Exception {
+        // Create an ibis instance.
+        ibis.ipl.Ibis ibis = IbisFactory.createIbis(ibisCapabilities, null,ONE2MANY,MANY2ONE);
+        ibis.registry().waitUntilPoolClosed();
+        // Elect a server
+        IbisIdentifier serverId = ibis.registry().elect("Server");
+        // If I am the server, run server, else run client.
+        if (serverId.equals(ibis.identifier())) {
+            Server server = new Server(ibis,board,bound);
+        } else {
+            Client client = new Client(ibis,serverId);
+        }
     }
 
     public static void main(String[] args) {
@@ -132,8 +165,7 @@ final class Ida {
             try {
                 initialBoard = new Board(fileName);
             } catch (Exception e) {
-                System.err
-                        .println("could not initialize board from file: " + e);
+                System.err.println("could not initialize board from file: " + e);
                 System.exit(1);
             }
         }
@@ -146,9 +178,9 @@ final class Ida {
             }
             System.exit(0);
         }
-
+        int bound = initialBoard.distance() + 6;
         try {
-            new Ibis().run();
+            run(initialBoard, bound);
         } catch (Exception e) {
             e.printStackTrace(System.err);
         }
