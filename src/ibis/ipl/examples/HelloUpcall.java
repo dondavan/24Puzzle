@@ -55,8 +55,10 @@ public class HelloUpcall implements MessageUpcall {
      *             when the message cannot be read
      */
     public void upcall(ReadMessage message) throws IOException {
-        String s = message.readString();
-        System.out.println("Received string: " + s);
+        byte[] byteBoard= new byte[1];
+        byteBoard[0] = 1;
+        message.readArray(byteBoard);
+        System.out.println("Received string: " + byteBoard);
         setFinished();
     }
 
@@ -95,10 +97,11 @@ public class HelloUpcall implements MessageUpcall {
         // Create a send port for sending requests and connect.
         SendPort sender = myIbis.createSendPort(portType);
         sender.connect(server, "server");
-
+        byte[] byteBoard= new byte[1];
+        byteBoard[0] = 1;
         // Send the message.
         WriteMessage w = sender.newMessage();
-        w.writeString("Hi there");
+        w.writeArray(byteBoard);
         w.finish();
 
         // Close ports.

@@ -118,7 +118,7 @@ public class Server implements MessageUpcall{
             for (SendPort sendPort :sendPorts){
                 if((sendPort.connectedTo())[0].ibisIdentifier().equals(target)){
                     WriteMessage w = sendPort.newMessage();
-                    w.writeArray(byteBoard);
+                    w.writeInt(9);
                     w.finish();
                     System.err.println("Bytes: " + w.bytesWritten());
                     System.err.println("Send to: " + target);
@@ -136,11 +136,12 @@ public class Server implements MessageUpcall{
 
     private void serverReady() throws IOException {
         for (SendPort sendPort :sendPorts){
+            byte[] byteBoard= new byte[1];
+            byteBoard[0] = 1;
             WriteMessage w = sendPort.newMessage();
-            w.writeInt(1);
-            w.send();
+            w.writeInt(9);
             w.finish();
-            System.err.println("Notified  " + sendPort.identifier().ibisIdentifier());
+            System.err.println("Notified  " + (sendPort.connectedTo())[0].ibisIdentifier());
         }
     }
 

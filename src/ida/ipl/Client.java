@@ -3,6 +3,7 @@ package ida.ipl;
 import ibis.ipl.*;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 
 
 /**
@@ -73,13 +74,13 @@ public class Client implements MessageUpcall {
     }
 
     public void upcall(ReadMessage message) throws IOException, ClassNotFoundException {
+        System.err.println("Receievced from +" + message.origin().ibisIdentifier());
+        byte[] byteBoard = new byte[100];
+        ByteBuffer buffer = ByteBuffer.wrap(byteBoard);
+        message.readInt();
         if(waitingServer){
-            int serverStatus = message.readInt();
-            if(serverStatus == 1)serverReady();
+            serverReady();
         }else {
-            byte[] byteBoard = new byte[100];
-            message.readArray(byteBoard);
-            System.err.println("Remaining "+message.remaining());
             messageReady();
         }
         message.finish();
@@ -100,7 +101,7 @@ public class Client implements MessageUpcall {
     private void waitingMessage() throws IOException {
         synchronized (this) {
             while (waitingMessage) {
-                System.err.println("Waiting");
+                System.err.println("Waiting Message");
                 try {
                     wait();
                 } catch (Exception e) {
@@ -117,7 +118,7 @@ public class Client implements MessageUpcall {
     private void waitingServer() throws IOException {
         synchronized (this) {
             while (waitingServer) {
-                System.err.println("Waiting");
+                System.err.println("Waiting Server");
                 try {
                     wait();
                 } catch (Exception e) {
