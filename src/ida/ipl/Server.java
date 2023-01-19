@@ -40,6 +40,18 @@ public class Server implements MessageUpcall{
 
     }
 
+    private void run(Board board,int bound) throws IOException {
+        generateJob(board,bound);
+        serverReady();
+
+        while (result == 0){
+
+        }
+        // Close receive port.
+        receivePort.close();
+        System.err.println("receiver closed");
+    }
+
     private int generateJob(Board board,int bound){
         int solutions = 0;
         board.setBound(bound);
@@ -80,8 +92,9 @@ public class Server implements MessageUpcall{
         for(IbisIdentifier identifier:ibisIdentifiers){
             if(!identifier.equals(ibis.identifier())){
                 SendPort sendPort = ibis.createSendPort(Ida.ONE2MANY);
-                sendPort.connect(identifier, "fromServer");
+                ReceivePortIdentifier clientPortId = sendPort.connect(identifier, "fromServer");
                 sendPorts.add(sendPort);
+
             }
         }
     }
@@ -95,20 +108,20 @@ public class Server implements MessageUpcall{
     }
 
     private void sendMessage(IbisIdentifier target) throws IOException {
-        System.err.println("Send to: " + target);
         // If still have job pending and reuslt not found,
         // Get board and send job to client
         if(!jobCache.isEmpty() && result == 0){
             Board board = jobCache.get(jobCache.size()-1);
             jobCache.remove(jobCache.size()-1);
             byte[] byteBoard= board.getByteBoard();
+            System.err.println("Bytes: " + byteBoard.length);
             for (SendPort sendPort :sendPorts){
-                System.err.println("Send Port: " + sendPort.identifier().ibisIdentifier());
-                System.err.println("Target: " + target);
-                if(sendPort.identifier().ibisIdentifier().equals(target)){
+                if((sendPort.connectedTo())[0].ibisIdentifier().equals(target)){
                     WriteMessage w = sendPort.newMessage();
                     w.writeArray(byteBoard);
                     w.finish();
+                    System.err.println("Bytes: " + w.bytesWritten());
+                    System.err.println("Send to: " + target);
                 }
             }
         }else {
@@ -120,29 +133,12 @@ public class Server implements MessageUpcall{
         }
     }
 
-    private void run(Board board,int bound) throws IOException {
-        generateJob(board,bound);
-        serverReady();
-
-        synchronized (this) {
-            while (!finished) {
-                try {
-                    wait();
-                } catch (Exception e) {
-                    // ignored
-                }
-            }
-        }
-        // Close receive port.
-        receivePort.close();
-        System.err.println("receiver closed");
-    }
-
 
     private void serverReady() throws IOException {
         for (SendPort sendPort :sendPorts){
             WriteMessage w = sendPort.newMessage();
             w.writeInt(1);
+            w.send();
             w.finish();
             System.err.println("Notified  " + sendPort.identifier().ibisIdentifier());
         }
@@ -158,12 +154,17 @@ public class Server implements MessageUpcall{
     public void upcall(ReadMessage message) throws IOException {
         int s = message.readInt();
         IbisIdentifier identifier = message.origin().ibisIdentifier();
-        System.err.println("Received from: " + identifier);
+        message.finish();
+        System.err.println("Received from: " + identifier + " Content : " + s);
         sendMessage(identifier);
+    }
+
+    synchronized void wakeUp(){
+        notifyAll();
     }
 
     synchronized void setFinished() {
         finished = true;
-        notifyAll();
+        result = 1;
     }
 }

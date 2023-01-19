@@ -77,13 +77,12 @@ public class Client implements MessageUpcall {
             int serverStatus = message.readInt();
             if(serverStatus == 1)serverReady();
         }else {
-            Byte[] byteBoard = new Byte[0];
+            byte[] byteBoard = new byte[100];
             message.readArray(byteBoard);
-
-            System.err.println("Received from server: " + byteBoard);
-            waitingMessage = false;
-            notifyAll();
+            System.err.println("Remaining "+message.remaining());
+            messageReady();
         }
+        message.finish();
     }
 
 
@@ -126,6 +125,11 @@ public class Client implements MessageUpcall {
                 }
             }
         }
+    }
+
+    synchronized void messageReady(){
+        waitingMessage = false;
+        notifyAll();
     }
 
     synchronized void serverReady(){
