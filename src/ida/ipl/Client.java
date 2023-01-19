@@ -8,7 +8,7 @@ import java.io.IOException;
 /**
  * Ibis client, receive work from server and explore board
  */
-public class Client implements MessageUpcall{
+public class Client implements MessageUpcall {
 
     /**
      *  Ibis properties
@@ -16,11 +16,18 @@ public class Client implements MessageUpcall{
 
 
     private ibis.ipl.Ibis ibis;
-    private boolean finished = false;
     private ReceivePort receiver;
     static int expansions;
     IbisIdentifier serverId;
     SendPort sendPort;
+
+    // Set to 1 when result found
+    private int result = 0;
+
+    // Coordiante client status
+    private boolean finished = false;
+    private boolean waitingMessage = false;
+    private boolean waitingServer = true;
 
     public Client(ibis.ipl.Ibis ibis,IbisIdentifier serverId) throws Exception {
 
@@ -34,12 +41,9 @@ public class Client implements MessageUpcall{
         // send port to server
         senderConnect();
         receiverConnect();
-        receiveMessage();
 
-        WriteMessage w = sendPort.newMessage();
-        w.writeInt(8);
-        w.finish();
-        sendPort.close();
+        run();
+
         ibis.end();
     }
 
@@ -59,20 +63,45 @@ public class Client implements MessageUpcall{
         sendPort.connect(serverId, "toServer");
     }
 
-    public void upcall(ReadMessage message) throws IOException {
-        int s = message.readInt();
-        System.err.println("Received string: " + s);
+    private void run() throws IOException {
+        waitingServer();
+        while (result == 0){
+            sendReady();
+            waitingMessage();
+        }
         setFinished();
     }
 
-    synchronized void setFinished() {
-        finished = true;
-        notifyAll();
+    public void upcall(ReadMessage message) throws IOException, ClassNotFoundException {
+        if(waitingServer){
+            int serverStatus = message.readInt();
+            if(serverStatus == 1)serverReady();
+        }else {
+            Byte[] byteBoard = new Byte[0];
+            message.readArray(byteBoard);
+
+            System.err.println("Received from server: " + byteBoard);
+            waitingMessage = false;
+            notifyAll();
+        }
     }
 
-    private void receiveMessage() throws IOException {
+
+    /**
+     * send message to notify server this client is ready
+     */
+    private void sendReady() throws IOException {
+        WriteMessage w = sendPort.newMessage();
+        w.writeInt(6);
+        w.finish();
+        System.err.println("Send to Server");
+        waitingMessage = true;
+    }
+
+    private void waitingMessage() throws IOException {
         synchronized (this) {
-            while (!finished) {
+            while (waitingMessage) {
+                System.err.println("Waiting");
                 try {
                     wait();
                 } catch (Exception e) {
@@ -80,10 +109,41 @@ public class Client implements MessageUpcall{
                 }
             }
         }
+    }
 
+    /**
+     * client wait till server messages ready
+     * @throws IOException
+     */
+    private void waitingServer() throws IOException {
+        synchronized (this) {
+            while (waitingServer) {
+                System.err.println("Waiting");
+                try {
+                    wait();
+                } catch (Exception e) {
+                    // ignored
+                }
+            }
+        }
+    }
+
+    synchronized void serverReady(){
+        waitingServer = false;
+        notifyAll();
+        System.err.println("Server Ready! ");
+    }
+
+    synchronized void setFinished() throws IOException {
         // Close receive port.
         receiver.close();
-        System.err.println("receiver closed");
+        System.err.println("Receiver closed");
+        // Close send port.
+        sendPort.close();
+        System.err.println("Sender closed");
+
+        finished = true;
+        notifyAll();
     }
 
     /**

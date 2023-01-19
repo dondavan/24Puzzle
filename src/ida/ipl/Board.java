@@ -398,6 +398,13 @@ public final class Board implements Serializable {
     }
 
     /**
+     * return boad value in byte array
+     * @return
+     */
+    public byte[] getByteBoard(){
+        return board;
+    }
+    /**
      * returns the bound of this board.
      */
     public int bound() {
