@@ -113,12 +113,12 @@ public class Server implements MessageUpcall{
         if(!jobCache.isEmpty() && result == 0){
             Board board = jobCache.get(jobCache.size()-1);
             jobCache.remove(jobCache.size()-1);
-            byte[] byteBoard= board.getByteBoard();
-            System.err.println("Bytes: " + byteBoard.length);
+            ArrayList byteBoard = new ArrayList<>();
+            byteBoard.add(1);
             for (SendPort sendPort :sendPorts){
                 if((sendPort.connectedTo())[0].ibisIdentifier().equals(target)){
                     WriteMessage w = sendPort.newMessage();
-                    w.writeInt(9);
+                    w.writeObject(byteBoard);
                     w.finish();
                     System.err.println("Bytes: " + w.bytesWritten());
                     System.err.println("Send to: " + target);
@@ -136,10 +136,12 @@ public class Server implements MessageUpcall{
 
     private void serverReady() throws IOException {
         for (SendPort sendPort :sendPorts){
-            byte[] byteBoard= new byte[1];
-            byteBoard[0] = 1;
+            ArrayList byteBoard = new ArrayList<>();
+            byteBoard.add(1);
+            byteBoard.add(2);
             WriteMessage w = sendPort.newMessage();
-            w.writeInt(9);
+            w.writeObject(byteBoard);
+            System.err.println(w.bytesWritten());
             w.finish();
             System.err.println("Notified  " + (sendPort.connectedTo())[0].ibisIdentifier());
         }

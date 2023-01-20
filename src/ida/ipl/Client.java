@@ -4,6 +4,7 @@ import ibis.ipl.*;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 
 
 /**
@@ -75,9 +76,11 @@ public class Client implements MessageUpcall {
 
     public void upcall(ReadMessage message) throws IOException, ClassNotFoundException {
         System.err.println("Receievced from +" + message.origin().ibisIdentifier());
-        byte[] byteBoard = new byte[100];
-        ByteBuffer buffer = ByteBuffer.wrap(byteBoard);
-        message.readInt();
+        ArrayList byteBoard = (ArrayList) message.readObject();
+        while (!byteBoard.isEmpty()){
+            System.err.println(byteBoard.get(byteBoard.size()-1));
+            byteBoard.remove(byteBoard.size()-1);
+        }
         if(waitingServer){
             serverReady();
         }else {

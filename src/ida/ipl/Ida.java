@@ -15,13 +15,13 @@ final class Ida {
 
     static PortType ONE2MANY = new PortType(
             PortType.COMMUNICATION_RELIABLE,
-            PortType.SERIALIZATION_DATA,
+            PortType.SERIALIZATION_OBJECT,
             PortType.RECEIVE_AUTO_UPCALLS,
             PortType.CONNECTION_ONE_TO_MANY);
 
     static PortType MANY2ONE = new PortType(
             PortType.COMMUNICATION_RELIABLE,
-            PortType.SERIALIZATION_DATA,
+            PortType.SERIALIZATION_OBJECT,
             PortType.RECEIVE_AUTO_UPCALLS,
             PortType.CONNECTION_MANY_TO_ONE);
 
