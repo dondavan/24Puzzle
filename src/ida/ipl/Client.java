@@ -30,12 +30,14 @@ public class Client implements MessageUpcall {
     private boolean finished = false;
     private boolean waitingMessage = false;
     private boolean waitingServer = true;
+    private byte[] byteBoard;
 
     public Client(ibis.ipl.Ibis ibis,IbisIdentifier serverId) throws Exception {
 
         // Create an ibis instance.
         this.ibis = ibis;
         this.serverId = serverId;
+        this.byteBoard = new byte[25];
         ibis.registry().waitUntilPoolClosed();
 
         System.err.println("CLient "+ibis.identifier());
@@ -76,14 +78,14 @@ public class Client implements MessageUpcall {
 
     public void upcall(ReadMessage message) throws IOException, ClassNotFoundException {
         System.err.println("Receievced from +" + message.origin().ibisIdentifier());
-        ArrayList byteBoard = (ArrayList) message.readObject();
-        while (!byteBoard.isEmpty()){
-            System.err.println(byteBoard.get(byteBoard.size()-1));
-            byteBoard.remove(byteBoard.size()-1);
-        }
+        byte[] byteBoard = (byte[]) message.readObject();
         if(waitingServer){
+            // Ignore first message ready message from server
             serverReady();
         }else {
+            Board board = new Board(byteBoard);
+            solve(board,false);
+            System.err.println(board.distance());
             messageReady();
         }
         message.finish();

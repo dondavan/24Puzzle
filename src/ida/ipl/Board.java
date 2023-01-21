@@ -8,6 +8,7 @@ import java.io.Serializable;
 import java.io.FileInputStream;
 import java.io.PrintStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.NoSuchElementException;
 import java.util.Scanner;
@@ -221,6 +222,25 @@ public final class Board implements Serializable {
         PrintStream fout = new PrintStream(fileName);
         fout.print(this);
         fout.close();
+    }
+
+    public Board(byte[] original){
+        board = new byte[NSQRT * NSQRT];
+        System.arraycopy(original,0,board,0,NSQRT * NSQRT);
+        int blank = 0;
+        for(int i=0 ;i < board.length; i++){
+            if(board[i] == 0)blank=i;
+        }
+
+        // reset values changed by calls to move()
+        distance = calculateBoardDistance();
+        bound = original[NSQRT * NSQRT];
+        System.err.println("Bound  "+ bound);
+        blankX = blank%NSQRT;
+        blankY = blank/NSQRT;
+        prevDx = 0;
+        prevDy = 0;
+        depth = 0;
     }
 
     public void init(Board original) {

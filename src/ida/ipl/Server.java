@@ -5,6 +5,8 @@ import ibis.ipl.*;
 import java.io.IOException;
 import java.util.ArrayList;
 
+import static ida.ipl.Board.NSQRT;
+
 /**
  * Ibis server, responsible for distributing board branch to client
  */
@@ -22,10 +24,13 @@ public class Server implements MessageUpcall{
     // Set to 1 when result found
     private int result = 0;
 
+    private int bound;
+
     public Server(ibis.ipl.Ibis ibis, Board board,int bound) throws Exception{
 
         // Create an ibis instance.
         this.ibis = ibis;
+        this.bound = bound;
         sendPorts = new ArrayList<SendPort>();
         jobCache = new ArrayList<Board>();
         ibis.registry().waitUntilPoolClosed();
@@ -113,14 +118,21 @@ public class Server implements MessageUpcall{
         if(!jobCache.isEmpty() && result == 0){
             Board board = jobCache.get(jobCache.size()-1);
             jobCache.remove(jobCache.size()-1);
-            ArrayList byteBoard = new ArrayList<>();
-            byteBoard.add(1);
+            byte[] byteBoard = new byte[26];
+            byte[] byteBuffer = board.getByteBoard();
+            for(int i =0;i<byteBuffer.length;i++){
+                byteBoard[i] = byteBuffer[i];
+            }
+            //System.arraycopy(byteBuffer,0,board,0,NSQRT * NSQRT);
+            Integer a = new Integer(bound);
+            byteBoard[NSQRT * NSQRT] = a.byteValue();
+            System.err.println(byteBoard[NSQRT * NSQRT]);
             for (SendPort sendPort :sendPorts){
                 if((sendPort.connectedTo())[0].ibisIdentifier().equals(target)){
                     WriteMessage w = sendPort.newMessage();
-                    w.writeObject(byteBoard);
+                    w.writeArray(byteBoard);
                     w.finish();
-                    System.err.println("Bytes: " + w.bytesWritten());
+                    w.bytesWritten();
                     System.err.println("Send to: " + target);
                 }
             }
@@ -136,12 +148,10 @@ public class Server implements MessageUpcall{
 
     private void serverReady() throws IOException {
         for (SendPort sendPort :sendPorts){
-            ArrayList byteBoard = new ArrayList<>();
-            byteBoard.add(1);
-            byteBoard.add(2);
+            byte[] byteBoard = new byte[1];
+            byteBoard[0] = 1;
             WriteMessage w = sendPort.newMessage();
-            w.writeObject(byteBoard);
-            System.err.println(w.bytesWritten());
+            w.writeArray(byteBoard);
             w.finish();
             System.err.println("Notified  " + (sendPort.connectedTo())[0].ibisIdentifier());
         }
