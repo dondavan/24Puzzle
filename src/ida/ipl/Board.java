@@ -235,7 +235,8 @@ public final class Board implements Serializable {
         // reset values changed by calls to move()
         distance = calculateBoardDistance();
         bound = original[NSQRT * NSQRT];
-        System.err.println("Bound  "+ bound);
+        System.err.println("Bound  "+ bound + " Dist: " + distance);
+
         blankX = blank%NSQRT;
         blankY = blank/NSQRT;
         prevDx = 0;

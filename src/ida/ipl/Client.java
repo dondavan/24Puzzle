@@ -31,6 +31,7 @@ public class Client implements MessageUpcall {
     private boolean waitingMessage = false;
     private boolean waitingServer = true;
     private byte[] byteBoard;
+    private int solveResult;
 
     public Client(ibis.ipl.Ibis ibis,IbisIdentifier serverId) throws Exception {
 
@@ -70,7 +71,7 @@ public class Client implements MessageUpcall {
     private void run() throws IOException {
         waitingServer();
         while (result == 0){
-            sendReady();
+            sendReady(solveResult);
             waitingMessage();
         }
         setFinished();
@@ -84,8 +85,8 @@ public class Client implements MessageUpcall {
             serverReady();
         }else {
             Board board = new Board(byteBoard);
-            solve(board,false);
-            System.err.println(board.distance());
+            //System.err.println(board);
+            solveResult = solve(board,false);
             messageReady();
         }
         message.finish();
@@ -95,13 +96,14 @@ public class Client implements MessageUpcall {
     /**
      * send message to notify server this client is ready
      */
-    private void sendReady() throws IOException {
+    private void sendReady(int result) throws IOException {
         WriteMessage w = sendPort.newMessage();
-        w.writeInt(6);
+        w.writeInt(result);
         w.finish();
-        System.err.println("Send to Server");
+        System.err.println("Send to Server " + solveResult);
         waitingMessage = true;
     }
+
 
     private void waitingMessage() throws IOException {
         synchronized (this) {
@@ -160,7 +162,7 @@ public class Client implements MessageUpcall {
      * expands this board into all possible positions, and returns the number of
      * solutions. Will cut off at the bound set in the board.
      */
-    private static int solutions(Board board, BoardCache cache) {
+    private int solutions(Board board, BoardCache cache) {
         expansions++;
         if (board.distance() == 0) {
             System.err.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>> Gotcha!");
@@ -188,9 +190,10 @@ public class Client implements MessageUpcall {
      * expands this board into all possible positions, and returns the number of
      * solutions. Will cut off at the bound set in the board.
      */
-    private static int solutions(Board board) {
+    private int solutions(Board board) {
         expansions++;
         if (board.distance() == 0) {
+            System.err.println(board);
             return 1;
         }
 
@@ -200,7 +203,6 @@ public class Client implements MessageUpcall {
 
         Board[] children = board.makeMoves();
         int result = 0;
-
         for (int i = 0; i < children.length; i++) {
             if (children[i] != null) {
                 result += solutions(children[i]);
@@ -210,36 +212,22 @@ public class Client implements MessageUpcall {
     }
 
 
-    private static void solve(Board board, boolean useCache) {
+    private int solve(Board board, boolean useCache) {
         BoardCache cache = null;
         if (useCache) {
             cache = new BoardCache();
         }
-        int bound = board.distance();
         int solutions;
+        System.err.println("Board bound: "+ board.bound());
 
-        System.out.println("Try bound ");
-        System.out.flush();
-
-        do {
-            board.setBound(bound);
-
-            System.out.print(bound + " ");
-            System.out.flush();
-
-            expansions = 0;
-            if (useCache) {
-                solutions = solutions(board, cache);
-            } else {
-                solutions = solutions(board);
-            }
-
-            bound += 2;
-            System.err.println("Expansions: " + expansions);
-        } while (solutions == 0);
-
-        System.out.println("\nresult is " + solutions + " solutions of "
-                + board.bound() + " steps");
+        expansions = 0;
+        if (useCache) {
+            solutions = solutions(board, cache);
+        } else {
+            solutions = solutions(board);
+        }
+        System.err.println("Result is " + solutions +" Expansions: " + expansions);
+        return solutions;
 
     }
 

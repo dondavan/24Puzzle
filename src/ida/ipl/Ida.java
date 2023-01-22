@@ -118,7 +118,7 @@ final class Ida {
 
     }
 
-    public static void run(Board board, int bound) throws Exception {
+    public static void run(Board board) throws Exception {
         // Create an ibis instance.
         ibis.ipl.Ibis ibis = IbisFactory.createIbis(ibisCapabilities, null,ONE2MANY,MANY2ONE);
         ibis.registry().waitUntilPoolClosed();
@@ -126,7 +126,7 @@ final class Ida {
         IbisIdentifier serverId = ibis.registry().elect("Server");
         // If I am the server, run server, else run client.
         if (serverId.equals(ibis.identifier())) {
-            Server server = new Server(ibis,board,bound);
+            Server server = new Server(ibis,board);
         } else {
             Client client = new Client(ibis,serverId);
         }
@@ -178,9 +178,8 @@ final class Ida {
             }
             System.exit(0);
         }
-        int bound = initialBoard.distance() + 6;
         try {
-            run(initialBoard, bound);
+            run(initialBoard);
         } catch (Exception e) {
             e.printStackTrace(System.err);
         }
