@@ -16,7 +16,6 @@ public class Client implements MessageUpcall {
      *  Ibis properties
      **/
 
-
     private ibis.ipl.Ibis ibis;
     private ReceivePort receiver;
     static int expansions;
@@ -71,10 +70,29 @@ public class Client implements MessageUpcall {
     private void run() throws IOException {
         waitingServer();
         while (result == 0){
-            sendReady(solveResult);
             waitingMessage();
+            sendMessage(solveResult);
         }
         setFinished();
+    }
+
+    private int solve(Board board, boolean useCache) {
+        BoardCache cache = null;
+        if (useCache) {
+            cache = new BoardCache();
+        }
+        int solutions;
+        System.err.println("Board bound: "+ board.bound());
+
+        expansions = 0;
+        if (useCache) {
+            solutions = solutions(board, cache);
+        } else {
+            solutions = solutions(board);
+        }
+        System.err.println("Result is " + solutions +" Expansions: " + expansions);
+        return solutions;
+
     }
 
     public void upcall(ReadMessage message) throws IOException, ClassNotFoundException {
@@ -86,7 +104,7 @@ public class Client implements MessageUpcall {
         }else {
             Board board = new Board(byteBoard);
             //System.err.println(board);
-            solveResult = solve(board,false);
+            solveResult = solve(board,true);
             messageReady();
         }
         message.finish();
@@ -94,68 +112,30 @@ public class Client implements MessageUpcall {
 
 
     /**
-     * send message to notify server this client is ready
+     * send pending children board to server
      */
-    private void sendReady(int result) throws IOException {
+    private void sendBoard(Board[] boards) throws IOException {
+        byte[] bytes = new byte[1];
+        bytes[0] = 1;
         WriteMessage w = sendPort.newMessage();
-        w.writeInt(result);
+        w.writeArray(bytes);
         w.finish();
-        System.err.println("Send to Server " + solveResult);
+
+        System.err.println("Send to Server " + bytes[0]);
         waitingMessage = true;
     }
 
-
-    private void waitingMessage() throws IOException {
-        synchronized (this) {
-            while (waitingMessage) {
-                System.err.println("Waiting Message");
-                try {
-                    wait();
-                } catch (Exception e) {
-                    // ignored
-                }
-            }
-        }
-    }
-
     /**
-     * client wait till server messages ready
-     * @throws IOException
+     * send message to notify server this client is ready
      */
-    private void waitingServer() throws IOException {
-        synchronized (this) {
-            while (waitingServer) {
-                System.err.println("Waiting Server");
-                try {
-                    wait();
-                } catch (Exception e) {
-                    // ignored
-                }
-            }
-        }
-    }
-
-    synchronized void messageReady(){
-        waitingMessage = false;
-        notifyAll();
-    }
-
-    synchronized void serverReady(){
-        waitingServer = false;
-        notifyAll();
-        System.err.println("Server Ready! ");
-    }
-
-    synchronized void setFinished() throws IOException {
-        // Close receive port.
-        receiver.close();
-        System.err.println("Receiver closed");
-        // Close send port.
-        sendPort.close();
-        System.err.println("Sender closed");
-
-        finished = true;
-        notifyAll();
+    private void sendMessage(int result) throws IOException {
+        byte[] bytes = new byte[1];
+        bytes[0] = 6;
+        WriteMessage w = sendPort.newMessage();
+        w.writeArray(bytes);
+        w.finish();
+        System.err.println("Send to Server " + solveResult);
+        waitingMessage = true;
     }
 
     /**
@@ -212,23 +192,61 @@ public class Client implements MessageUpcall {
     }
 
 
-    private int solve(Board board, boolean useCache) {
-        BoardCache cache = null;
-        if (useCache) {
-            cache = new BoardCache();
-        }
-        int solutions;
-        System.err.println("Board bound: "+ board.bound());
 
-        expansions = 0;
-        if (useCache) {
-            solutions = solutions(board, cache);
-        } else {
-            solutions = solutions(board);
-        }
-        System.err.println("Result is " + solutions +" Expansions: " + expansions);
-        return solutions;
 
+
+    private void waitingMessage() throws IOException {
+        synchronized (this) {
+            while (waitingMessage) {
+                System.err.println("Waiting Message");
+                try {
+                    wait();
+                } catch (Exception e) {
+                    // ignored
+                }
+            }
+        }
+    }
+
+    /**
+     * client wait till server messages ready
+     * @throws IOException
+     */
+    private void waitingServer() throws IOException {
+        synchronized (this) {
+            while (waitingServer) {
+                System.err.println("Waiting Server");
+                try {
+                    wait();
+                } catch (Exception e) {
+                    // ignored
+                }
+            }
+        }
+    }
+
+
+    synchronized void messageReady(){
+        waitingMessage = false;
+        notifyAll();
+    }
+
+    synchronized void serverReady(){
+        waitingServer = false;
+        notifyAll();
+        System.err.println("Server Ready! ");
+    }
+
+    synchronized void setFinished() throws IOException {
+        // Close receive port.
+        receiver.close();
+        System.err.println("Receiver closed");
+        // Close send port.
+        sendPort.close();
+        System.err.println("Sender closed");
+
+        finished = true;
+        notifyAll();
     }
 
 }

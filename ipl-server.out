@@ -1,19 +1,12 @@
-Could not start Server
-ibis.smartsockets.virtual.InitializationException: Failed to bind to port in range [8888]: Address already in use (Bind failed)
-	at ibis.smartsockets.virtual.VirtualSocketFactory.<init>(VirtualSocketFactory.java:253)
-	at ibis.smartsockets.virtual.VirtualSocketFactory.createSocketFactory(VirtualSocketFactory.java:2001)
-	at ibis.smartsockets.virtual.VirtualSocketFactory.getOrCreateSocketFactory(VirtualSocketFactory.java:1875)
-	at ibis.ipl.server.Server.<init>(Server.java:182)
-	at ibis.ipl.server.Server.<init>(Server.java:76)
-	at ibis.ipl.server.Server.main(Server.java:519)
-Caused by: java.io.IOException: Failed to bind to port in range [8888]: Address already in use (Bind failed)
-	at ibis.smartsockets.direct.DirectSocketFactory.createServerSocket(DirectSocketFactory.java:1321)
-	at ibis.smartsockets.direct.00:55:01 Central Registry: creating new pool: "pool14039"
-00:55:01 Central Registry: (Ibis 0, location localhost) joined pool "pool14039" now 1 members
-00:55:01 Central Registry: (Ibis 1, location localhost) joined pool "pool14039" now 2 members
-00:55:01 Central Registry: (Ibis 2, location localhost) joined pool "pool14039" now 3 members
-00:55:01 Central Registry: pool "pool14039" now closed
-00:55:01 Central Registry: (Ibis 0, location localhost) won election "Server" in pool "pool14039"
-00:56:28 ERROR [event pusher thread] ibis.ipl.registry.central.server.Pool - cannot reach (Ibis 0, location localhost)@T4 to push events to
-00:56:28 ERROR [event pusher thread] ibis.ipl.registry.central.server.Pool - cannot reach (Ibis 2, location localhost)@T4 to push events to
-00:56:28 ERROR [event pusher thread] ibis.ipl.registry.central.server.Pool - cannot reach (Ibis 1, location localhost)@T4 to push events to
+Ibis server running on 192.168.0.104-8888#96.db.4a.8e.56.7e.00.00.fd.39.6c.c7.d6.f3.eb.e7~thhugh+22
+List of Services:
+    Central Registry service on virtual port 302
+    Management service on virtual port 304
+    Bootstrap service on virtual port 303
+Known hubs now: 192.168.0.104-8888#96.db.4a.8e.56.7e.00.00.fd.39.6c.c7.d6.f3.eb.e7~thhugh+22
+17:12:37 Central Registry: creating new pool: "pool34201"
+17:12:37 Central Registry: (Ibis 0, location 192@168@0@104) joined pool "pool34201" now 1 members
+17:12:37 Central Registry: (Ibis 1, location 192@168@0@104) joined pool "pool34201" now 2 members
+17:12:37 Central Registry: (Ibis 2, location 192@168@0@104) joined pool "pool34201" now 3 members
+17:12:37 Central Registry: pool "pool34201" now closed
+17:12:37 Central Registry: (Ibis 1, location 192@168@0@104) won election "Server" in pool "pool34201"

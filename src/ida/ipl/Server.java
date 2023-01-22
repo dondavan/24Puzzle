@@ -1,8 +1,10 @@
 package ida.ipl;
 
+import com.sun.jmx.remote.internal.ArrayQueue;
 import ibis.ipl.*;
 
 import java.io.IOException;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 
 import static ida.ipl.Board.NSQRT;
@@ -16,29 +18,33 @@ public class Server implements MessageUpcall{
      *  Ibis properties
      **/
     private ibis.ipl.Ibis ibis;
+
+
+    static int QUEUE_SIZE = 10000;
     private boolean finished = false;
     private ArrayList<SendPort> sendPorts;
-    private ArrayList<Board> jobCache;
+    private ArrayDeque<Board> jobQueue;
     private ReceivePort receivePort;
-    private Board board;
+    private Board initialBoard;
+    private boolean clientComputing;
 
     // Set to 1 when result found
     private int result = 0;
 
     private int bound;
 
-    public Server(ibis.ipl.Ibis ibis, Board board) throws Exception{
+    public Server(ibis.ipl.Ibis ibis, Board initial) throws Exception{
 
         // Create an ibis instance.
         this.ibis = ibis;
         sendPorts = new ArrayList<SendPort>();
-        jobCache = new ArrayList<Board>();
-        this.board = board;
-
+        jobQueue = new ArrayDeque<>(QUEUE_SIZE);
         ibis.registry().waitUntilPoolClosed();
         IbisIdentifier[] joinedIbises = ibis.registry().joinedIbises();
-
         System.err.println("Server "+ibis.identifier());
+
+        this.initialBoard = initial;
+
         receiverConnect();
         senderConnect(joinedIbises);
 
@@ -48,10 +54,24 @@ public class Server implements MessageUpcall{
     }
 
     private void run() throws IOException {
-        bound = board.distance() + 2;
-        generateJob(board,bound);
+        bound = initialBoard.distance();
         serverReady();
         while (result == 0) {
+            initialBoard.setBound(bound);
+            jobQueue.push(initialBoard);
+            clientComputing = true;
+            // Let client expand board
+            synchronized (this) {
+                while (clientComputing) {
+                    System.err.println("clientComputing");
+                    try {
+                        wait();
+                    } catch (Exception e) {
+                        // ignored
+                    }
+                }
+            }
+            bound += 2;
 
         }
         // Close receive port.
@@ -59,6 +79,7 @@ public class Server implements MessageUpcall{
         System.err.println("receiver closed");
     }
 
+    /*
     synchronized int generateJob(Board board,int bound){
         int solutions = 0;
         board.setBound(bound);
@@ -67,7 +88,7 @@ public class Server implements MessageUpcall{
         notifyAll();
         return solutions;
     }
-
+*/
     private int expancdSolution(Board board,ArrayList<Board> jobCache) {
         if (board.distance() == 0) {
             System.err.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>> Gotcha!");
@@ -115,7 +136,8 @@ public class Server implements MessageUpcall{
     }
 
     private void sendMessage(IbisIdentifier target) throws IOException {
-        if(jobCache.size() == 0){
+        /*
+        if(jobQueue.size() == 0){
             bound += 2;
             generateJob(board,bound);
             synchronized (this) {
@@ -158,6 +180,7 @@ public class Server implements MessageUpcall{
             }
             setFinished();
         }
+         */
     }
 
 
@@ -175,16 +198,32 @@ public class Server implements MessageUpcall{
     /**
      * Override upcall to implement messageupcall
      * Automatic triggered when new message incoming
+     * One byte for signal transmission
+     * otherwise for board transmisson
      * @param message
      * @throws IOException
      */
     @Override
-    public void upcall(ReadMessage message) throws IOException {
-        int clientResult = message.readInt();
+    public void upcall(ReadMessage message) throws IOException, ClassNotFoundException {
+        int messageSize = message.size();
+        System.err.println("Message Size: "+ messageSize);
+        byte[] clientMessage = (byte[]) message.readObject();
+
+        // Request for board
+        if(clientMessage[clientMessage.length-1] == 6){
+
+        }
+        // Client send children board
+        else if(clientMessage[clientMessage.length-1] == 5){
+
+        }
+        // Result Found
+        else if(clientMessage[clientMessage.length-1] == 1){
+            result = clientMessage[clientMessage.length-1];
+        }
+        System.err.println(clientMessage[clientMessage.length-1]);
         IbisIdentifier identifier = message.origin().ibisIdentifier();
         message.finish();
-        result = clientResult;
-        System.err.println("Received from: " + identifier + " Content : " + result);
         sendMessage(identifier);
     }
 
