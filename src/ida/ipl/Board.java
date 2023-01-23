@@ -89,7 +89,7 @@ public final class Board implements Serializable {
         }
         blankX = 0;
         blankY = 0;
-
+        int parentDepth = 0;
         // size of cycle. alternates between NSQRT and (NSQRT - 1)
         int n = NSQRT - 1;
 
@@ -148,7 +148,7 @@ public final class Board implements Serializable {
                     throw new Error("not going in any direction");
                 }
             }
-            move(dx, dy);
+            move(dx, dy, parentDepth);
         }
 
         // reset values changed by calls to move()
@@ -156,6 +156,7 @@ public final class Board implements Serializable {
         prevDx = 0;
         prevDy = 0;
         depth = 0;
+        parentDepth = 0;
         distance = calculateBoardDistance();
     }
 
@@ -239,7 +240,7 @@ public final class Board implements Serializable {
         prevDx = original[NSQRT * NSQRT];
         prevDy = original[NSQRT * NSQRT + 1];
         bound = original[NSQRT * NSQRT + 2];
-        depth = 0;
+        depth = original[NSQRT * NSQRT + 3];
     }
 
     public void init(Board original) {
@@ -308,14 +309,14 @@ public final class Board implements Serializable {
      * Moves the blank in the given direction. Also updates bound, distance and
      * depth.
      */
-    private void move(int dx, int dy) {
+    private void move(int dx, int dy, int parentDepth) {
         int x = blankX + dx;
         int y = blankY + dy;
         byte v = getBoardValue(x, y);
 
         bound--;
         distance += -tileDistance(v, x, y) + tileDistance(v, blankX, blankY);
-        depth++;
+        depth = parentDepth+1;
 
         setBoardValue((byte) 0, x, y);
         setBoardValue(v, blankX, blankY);
@@ -331,31 +332,31 @@ public final class Board implements Serializable {
      * does not "undo" the move which created this board. Elements in the
      * returned array may be "null".
      */
-    public Board[] makeMoves() {
+    public Board[] makeMoves(int parentDepth) {
         Board[] result = new Board[BRANCH_FACTOR];
         int n = 0;
 
         if (blankX > 0 && prevDx != 1) {
             result[n] = new Board(this);
-            result[n].move(-1, 0);
+            result[n].move(-1, 0, parentDepth);
             n++;
         }
 
         if (blankX < (NSQRT - 1) && prevDx != -1) {
             result[n] = new Board(this);
-            result[n].move(1, 0);
+            result[n].move(1, 0, parentDepth);
             n++;
         }
 
         if (blankY > 0 && prevDy != 1) {
             result[n] = new Board(this);
-            result[n].move(0, -1);
+            result[n].move(0, -1,parentDepth);
             n++;
         }
 
         if (blankY < (NSQRT - 1) && prevDy != -1) {
             result[n] = new Board(this);
-            result[n].move(0, 1);
+            result[n].move(0, 1, parentDepth);
             n++;
         }
         return result;
@@ -366,35 +367,35 @@ public final class Board implements Serializable {
      * does not "undo" the move which created this board. Elements in the
      * returned array may be "null".
      */
-    public Board[] makeMoves(BoardCache cache) {
+    public Board[] makeMoves(BoardCache cache,int parentDepth) {
         Board[] result = new Board[BRANCH_FACTOR];
         int n = 0;
 
         if (blankX > 0 && prevDx != 1) {
             // result[n] = new Board(this);
             result[n] = cache.get(this);
-            result[n].move(-1, 0);
+            result[n].move(-1, 0, parentDepth);
             n++;
         }
 
         if (blankX < (NSQRT - 1) && prevDx != -1) {
             // result[n] = new Board(this);
             result[n] = cache.get(this);
-            result[n].move(1, 0);
+            result[n].move(1, 0, parentDepth);
             n++;
         }
 
         if (blankY > 0 && prevDy != 1) {
             // result[n] = new Board(this);
             result[n] = cache.get(this);
-            result[n].move(0, -1);
+            result[n].move(0, -1, parentDepth);
             n++;
         }
 
         if (blankY < (NSQRT - 1) && prevDy != -1) {
             // result[n] = new Board(this);
             result[n] = cache.get(this);
-            result[n].move(0, 1);
+            result[n].move(0, 1, parentDepth);
             n++;
         }
 

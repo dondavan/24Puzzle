@@ -8,6 +8,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 
 import static ida.ipl.Board.NSQRT;
+import static ida.ipl.Server.CUT_OFF_DEPTH;
 
 
 /**
@@ -27,6 +28,7 @@ public class Client implements MessageUpcall {
 
     // Set to 1 when result found
     private int result = 0;
+
 
     // Coordiante client status
     private boolean finished = false;
@@ -103,30 +105,34 @@ public class Client implements MessageUpcall {
     private void sendBoard(Board[] boards) throws IOException {
 
         // Size for default 4 board, -1 space for flag, -2 space for board amount
-        // Each Section : 0-24 board 25 prevX 26 prevY 27 Bound
+        // Each Section : 0-24 board 25 prevX 26 prevY 27 Bound 28 Depth
         //System.err.println("Sent ");
-        byte[] bytes = new byte[ (NSQRT*NSQRT + 3)* 4 + 2];
+        byte[] bytes = new byte[ (NSQRT*NSQRT + 4)* 4 + 2];
         int count = 0;
         for (int i = 0; i < boards.length; i++) {
             if (boards[i] != null) {
                 byte[] byteBuffer = boards[i].getByteBoard();
                 for(int j =0;j<byteBuffer.length;j++){
-                    bytes[(NSQRT*NSQRT + 3)* count +j] = byteBuffer[j];
+                    bytes[(NSQRT*NSQRT + 4)* count +j] = byteBuffer[j];
                 }
                 Integer intPrevX = new Integer(boards[i].getPrevX());
-                bytes[(NSQRT*NSQRT + 3)* count + (NSQRT*NSQRT)] = intPrevX.byteValue();
+                bytes[(NSQRT*NSQRT + 4)* count + (NSQRT*NSQRT)] = intPrevX.byteValue();
                 Integer intPrevY = new Integer(count);
-                bytes[(NSQRT*NSQRT + 3)* count + (NSQRT*NSQRT) +1 ] = intPrevY.byteValue();
+                bytes[(NSQRT*NSQRT + 4)* count + (NSQRT*NSQRT) +1 ] = intPrevY.byteValue();
                 Integer intBound = new Integer(boards[i].bound());
-                bytes[(NSQRT*NSQRT + 3)* count + (NSQRT*NSQRT) +2 ] = intBound.byteValue();
+                bytes[(NSQRT*NSQRT + 4)* count + (NSQRT*NSQRT) +2 ] = intBound.byteValue();
+                Integer intDepth = new Integer(boards[i].depth());
+                bytes[(NSQRT*NSQRT + 4)* count + (NSQRT*NSQRT) +3 ] = intDepth.byteValue();
+
+                //System.err.println("Send Board Depth: "+ bytes[(NSQRT*NSQRT + 4)* count + (NSQRT*NSQRT) +3 ] );
                 count ++;
             }
         }
         if(count != 0){
             Integer countByte = new Integer(count);
-            bytes[ (NSQRT * NSQRT + 3) * 4] = countByte.byteValue();
+            bytes[ (NSQRT * NSQRT + 4) * 4] = countByte.byteValue();
             Integer flagByte = new Integer(5);
-            bytes[ (NSQRT * NSQRT + 3) * 4 + 1] = flagByte.byteValue();
+            bytes[ (NSQRT * NSQRT + 4) * 4 + 1] = flagByte.byteValue();
 
 
             WriteMessage w = sendPort.newMessage();
@@ -155,6 +161,7 @@ public class Client implements MessageUpcall {
 
 
     private int solve(Board board, boolean useCache) throws IOException {
+        //System.err.println("Compute Depth:"+ board.depth());
         BoardCache cache = null;
         if (useCache) {
             cache = new BoardCache();
@@ -167,7 +174,7 @@ public class Client implements MessageUpcall {
         } else {
             solutions = solutions(board);
         }
-        System.err.println("Result is " + solutions +" Expansions: " + expansions);
+        System.err.println("*******Result is " + solutions +" Expansions: " + expansions);
         return solutions;
 
     }
@@ -184,39 +191,75 @@ public class Client implements MessageUpcall {
             return 1;
         }
 
+        //System.err.println("Depth: "+ board.depth() + " Dist: " + board.distance() + " Bound: " + board.bound());
         if (board.distance() > board.bound()) {
             return 0;
         }
 
-        Board[] children = board.makeMoves(cache);
-        Board targetBoard = null;
-
+        Board[] children = board.makeMoves(cache, board.depth());
         int result = 0;
 
-        int best_dist = board.bound();
+        /*
+        for (int i = 0; i < children.length; i++) {
+            if (children[i] != null ) {
+                System.err.println(children[i]);
+                System.err.println("Bound: "+ children[i].bound());
+                System.err.println("Dist: "+ children[i].distance());
+                System.err.println("X: "+ children[i].getPrevX());
+                System.err.println("Y: "+ children[i].getPrevY());
+            }
+        }*/
+        if(board.depth() < CUT_OFF_DEPTH){
 
-        for (int i = 0; i < children.length; i++) {
-            if (children[i] != null && children[i].distance() < best_dist) {
-                best_dist = children[i].distance();
+            Board targetBoard = null;
+            int best_dist = board.bound();
+            /*
+            for (int i = 0; i < children.length; i++) {
+                if (children[i] != null ) {
+                    System.err.println(children[i]);
+                    System.err.println("Bound: "+ children[i].bound());
+                    System.err.println("Dist: "+ children[i].distance());
+                    System.err.println("Depth: "+ children[i].depth());
+                }
             }
-        }
-        for (int i = 0; i < children.length; i++) {
-            if (children[i] != null && children[i].distance() == best_dist && targetBoard == null) {
-                targetBoard = children[i];
-                children[i] = null;
-                break;
+             */
+            for (int i = 0; i < children.length; i++) {
+                if (children[i] != null && children[i].distance() < best_dist) {
+                    best_dist = children[i].distance();
+                }
+                // Cut of unqualified child
+                /*
+                if(children[i] != null && children[i].distance() > children[i].bound()){
+                    children[i] = null;
+                    expansions++;
+                }
+                */
             }
-        }
-        sendBoard(children);
-        if(targetBoard!=null) {
-            solutions(targetBoard,cache);
+            for (int i = 0; i < children.length; i++) {
+                if (children[i] != null && children[i].distance() == best_dist && targetBoard == null) {
+                    targetBoard = children[i];
+                    children[i] = null;
+                    break;
+                }
+            }
+            sendBoard(children);
+            if(targetBoard!=null) {
+                result += solutions(targetBoard,cache);
             /*
             System.err.println(targetBoard);
             System.err.println("Bound: "+targetBoard.bound());
             System.err.println("X: "+ targetBoard.getPrevX());
             System.err.println("Y: "+ targetBoard.getPrevY());
             */
+            }
+        }else {
+            for (int i = 0; i < children.length; i++) {
+                if (children[i] != null) {
+                    result += solutions(children[i], cache);
+                }
+            }
         }
+
         cache.put(children);
         return result;
     }
@@ -236,7 +279,7 @@ public class Client implements MessageUpcall {
             return 0;
         }
 
-        Board[] children = board.makeMoves();
+        Board[] children = board.makeMoves(board.depth());
         int result = 0;
         for (int i = 0; i < children.length; i++) {
             if (children[i] != null) {

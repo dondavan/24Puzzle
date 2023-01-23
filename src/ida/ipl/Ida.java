@@ -32,92 +32,6 @@ final class Ida {
             IbisCapabilities.SIGNALS);
 
 
-    /**
-     * expands this board into all possible positions, and returns the number of
-     * solutions. Will cut off at the bound set in the board.
-     */
-    private static int solutions(Board board, BoardCache cache) {
-        expansions++;
-        if (board.distance() == 0) {
-            System.err.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>> Gotcha!");
-            System.err.println(board);
-            return 1;
-        }
-
-        if (board.distance() > board.bound()) {
-            return 0;
-        }
-
-        Board[] children = board.makeMoves(cache);
-        int result = 0;
-
-        for (int i = 0; i < children.length; i++) {
-            if (children[i] != null) {
-                result += solutions(children[i], cache);
-            }
-        }
-        cache.put(children);
-        return result;
-    }
-
-    /**
-     * expands this board into all possible positions, and returns the number of
-     * solutions. Will cut off at the bound set in the board.
-     */
-    private static int solutions(Board board) {
-        expansions++;
-        if (board.distance() == 0) {
-            return 1;
-        }
-
-        if (board.distance() > board.bound()) {
-            return 0;
-        }
-
-        Board[] children = board.makeMoves();
-        int result = 0;
-
-        for (int i = 0; i < children.length; i++) {
-            if (children[i] != null) {
-                result += solutions(children[i]);
-            }
-        }
-        return result;
-    }
-
-    private static void solve(Board board, boolean useCache) {
-        BoardCache cache = null;
-        if (useCache) {
-            cache = new BoardCache();
-        }
-        int bound = board.distance();
-        int solutions;
-
-        System.out.println("Try bound ");
-        System.out.flush();
-
-        do {
-            board.setBound(bound);
-
-            System.out.print(bound + " ");
-            System.out.flush();
-
-            expansions = 0;
-            if (useCache) {
-                solutions = solutions(board, cache);
-            } else {
-                solutions = solutions(board);
-            }
-
-            bound += 2;
-            System.err.println("Expansions: " + expansions);
-        } while (solutions == 0);
-
-        System.out.println("\nresult is " + solutions + " solutions of "
-                + board.bound() + " steps");
-
-    }
-
     public static void run(Board initial) throws Exception {
         // Create an ibis instance.
         ibis.ipl.Ibis ibis = IbisFactory.createIbis(ibisCapabilities, null,ONE2MANY,MANY2ONE);
@@ -188,7 +102,6 @@ final class Ida {
         System.err.println(initialBoard);
 
         long start = System.currentTimeMillis();
-        solve(initialBoard, cache);
         long end = System.currentTimeMillis();
 
         // NOTE: this is printed to standard error! The rest of the output
