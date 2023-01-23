@@ -1,10 +1,8 @@
 package ida.ipl;
 
-import com.sun.jmx.remote.internal.ArrayQueue;
 import ibis.ipl.*;
 
 import java.io.IOException;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.concurrent.ArrayBlockingQueue;
 
@@ -19,7 +17,11 @@ public class Server implements MessageUpcall{
     *   Flag for client message
      **/
     static int SEND_BOARD = 6;
+    static int RECV_BOARD = 5;
     static int CUT_OFF_DEPTH = 4;
+    static int RESULT_FOUND = 1;
+    static int RESULT_NOT_FOUND = 0;
+
 
     /**
      *  Ibis properties
@@ -28,7 +30,6 @@ public class Server implements MessageUpcall{
 
 
     static int QUEUE_SIZE = 999999;
-    private boolean finished = false;
     private ArrayList<SendPort> sendPorts;
     private ArrayBlockingQueue<Board> jobQueue;
     private ReceivePort receivePort;
@@ -61,6 +62,7 @@ public class Server implements MessageUpcall{
         senderConnect(joinedIbises);
 
         run();
+        setFinished();
         ibis.end();
 
     }
@@ -90,14 +92,6 @@ public class Server implements MessageUpcall{
             }
             bound += 2;
         }
-        // Close receive port.
-        for (SendPort sendPort :sendPorts){
-            // Close ports.
-            sendPort.close();
-        }
-        setFinished();
-        receivePort.close();
-        System.err.println("receiver closed");
     }
 
     /*
@@ -204,12 +198,9 @@ public class Server implements MessageUpcall{
     public void upcall(ReadMessage message) throws IOException, ClassNotFoundException {
         byte[] clientMessage = (byte[]) message.readObject();
         int flag = clientMessage[clientMessage.length-1];
-        // Request for board
-        if(clientMessage[clientMessage.length-1] == 6){
 
-        }
         // Client send children board
-        else if(clientMessage[clientMessage.length-1] == 5){
+        if(clientMessage[clientMessage.length-1] == RECV_BOARD){
             byte[] byteBoard = new byte[NSQRT*NSQRT + 4];
             int count = clientMessage[clientMessage.length-2];
             //System.err.println("Count: "+ count);
@@ -230,17 +221,15 @@ public class Server implements MessageUpcall{
             }
         }
         // Result Found
-        else if(clientMessage[clientMessage.length-1] == 1){
+        else if(clientMessage[clientMessage.length-1] == RESULT_FOUND){
             System.err.println("Result Found");
+            result = clientMessage[clientMessage.length-1];
             end = System.currentTimeMillis();
             System.err.println("ida took " + (end - start) + " milliseconds");
-            result = clientMessage[clientMessage.length-1];
-            pendingCoomputing --;
-            if (jobQueue.isEmpty())setClientComputing();
+            setClientComputing();
         }
         //  Client result not found
-        else if(clientMessage[clientMessage.length-1] == 0){
-            result = clientMessage[clientMessage.length-1];
+        else if(clientMessage[clientMessage.length-1] == RESULT_NOT_FOUND){
             pendingCoomputing --;
             //System.err.println("Pending:  "+pendingCoomputing);
             if (jobQueue.isEmpty() && pendingCoomputing == 0)setClientComputing();
@@ -255,8 +244,22 @@ public class Server implements MessageUpcall{
         notifyAll();
     }
 
-    synchronized void setFinished() {
-        finished = true;
-        result = 1;
+    synchronized void setFinished() throws IOException {
+        for (SendPort sendPort :sendPorts){
+            byte[] bytes = new byte[1];
+            Integer intResult = new Integer(RESULT_FOUND);
+            bytes[0] = intResult.byteValue();
+            WriteMessage w = sendPort.newMessage();
+            w.writeArray(bytes);
+            w.finish();
+        }
+
+        // Close receive port.
+        for (SendPort sendPort :sendPorts){
+            // Close ports.
+            sendPort.close();
+        }
+        receivePort.close();
+        System.err.println("receiver closed");
     }
 }

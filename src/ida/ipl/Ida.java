@@ -92,16 +92,16 @@ final class Ida {
             }
             System.exit(0);
         }
-        try {
-            run(initialBoard);
-        } catch (Exception e) {
-            e.printStackTrace(System.err);
-        }
 
         System.err.println("Running IDA*, initial board:");
         System.err.println(initialBoard);
 
         long start = System.currentTimeMillis();
+        try {
+            run(initialBoard);
+        } catch (Exception e) {
+            e.printStackTrace(System.err);
+        }
         long end = System.currentTimeMillis();
 
         // NOTE: this is printed to standard error! The rest of the output

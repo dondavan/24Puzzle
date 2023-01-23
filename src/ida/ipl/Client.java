@@ -8,7 +8,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 
 import static ida.ipl.Board.NSQRT;
-import static ida.ipl.Server.CUT_OFF_DEPTH;
+import static ida.ipl.Server.*;
 
 
 /**
@@ -76,23 +76,28 @@ public class Client implements MessageUpcall {
     private void run() throws IOException {
         waitingServer();
         while (result == 0){
-            sendMessage(6);
+            sendMessage(SEND_BOARD);
             waitingMessage();
-            solveResult = solve(board,true);
-            sendMessage(solveResult);
+            // Double check for message result
+            if(result == 0) {
+                solveResult = solve(board,true);
+                sendMessage(solveResult);
+            }
         }
-        setFinished();
     }
 
 
     public void upcall(ReadMessage message) throws IOException, ClassNotFoundException {
         //System.err.println("Receievced from +" + message.origin().ibisIdentifier());
-        byte[] byteBoard = (byte[]) message.readObject();
+        byte[] bytes = (byte[]) message.readObject();
+        if(bytes[bytes.length-1] == RESULT_FOUND){
+            setFinished();
+        }
         if(waitingServer){
             // Ignore first message ready message from server
             serverReady();
         }else {
-            this.board = new Board(byteBoard);
+            this.board = new Board(bytes);
             messageReady();
         }
         message.finish();
@@ -291,7 +296,6 @@ public class Client implements MessageUpcall {
 
 
 
-
     private void waitingMessage() throws IOException {
         synchronized (this) {
             while (waitingMessage) {
@@ -336,6 +340,11 @@ public class Client implements MessageUpcall {
     }
 
     synchronized void setFinished() throws IOException {
+        waitingMessage = false;
+        notifyAll();
+
+        result = 1;
+
         // Close receive port.
         receiver.close();
         System.err.println("Receiver closed");
@@ -344,7 +353,6 @@ public class Client implements MessageUpcall {
         System.err.println("Sender closed");
 
         finished = true;
-        notifyAll();
     }
 
 }
