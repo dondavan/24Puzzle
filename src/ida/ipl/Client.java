@@ -4,7 +4,10 @@ import ibis.ipl.*;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+
+import static ida.ipl.Board.NSQRT;
 
 
 /**
@@ -27,9 +30,10 @@ public class Client implements MessageUpcall {
 
     // Coordiante client status
     private boolean finished = false;
-    private boolean waitingMessage = false;
+    private boolean waitingMessage = true;
     private boolean waitingServer = true;
     private byte[] byteBoard;
+    private Board board;
     private int solveResult;
 
     public Client(ibis.ipl.Ibis ibis,IbisIdentifier serverId) throws Exception {
@@ -70,19 +74,92 @@ public class Client implements MessageUpcall {
     private void run() throws IOException {
         waitingServer();
         while (result == 0){
+            sendMessage(6);
             waitingMessage();
+            solveResult = solve(board,true);
             sendMessage(solveResult);
         }
         setFinished();
     }
 
-    private int solve(Board board, boolean useCache) {
+
+    public void upcall(ReadMessage message) throws IOException, ClassNotFoundException {
+        //System.err.println("Receievced from +" + message.origin().ibisIdentifier());
+        byte[] byteBoard = (byte[]) message.readObject();
+        if(waitingServer){
+            // Ignore first message ready message from server
+            serverReady();
+        }else {
+            this.board = new Board(byteBoard);
+            messageReady();
+        }
+        message.finish();
+    }
+
+
+    /**
+     * send pending children board to server
+     */
+    private void sendBoard(Board[] boards) throws IOException {
+
+        // Size for default 4 board, -1 space for flag, -2 space for board amount
+        // Each Section : 0-24 board 25 prevX 26 prevY 27 Bound
+        //System.err.println("Sent ");
+        byte[] bytes = new byte[ (NSQRT*NSQRT + 3)* 4 + 2];
+        int count = 0;
+        for (int i = 0; i < boards.length; i++) {
+            if (boards[i] != null) {
+                byte[] byteBuffer = boards[i].getByteBoard();
+                for(int j =0;j<byteBuffer.length;j++){
+                    bytes[(NSQRT*NSQRT + 3)* count +j] = byteBuffer[j];
+                }
+                Integer intPrevX = new Integer(boards[i].getPrevX());
+                bytes[(NSQRT*NSQRT + 3)* count + (NSQRT*NSQRT)] = intPrevX.byteValue();
+                Integer intPrevY = new Integer(count);
+                bytes[(NSQRT*NSQRT + 3)* count + (NSQRT*NSQRT) +1 ] = intPrevY.byteValue();
+                Integer intBound = new Integer(boards[i].bound());
+                bytes[(NSQRT*NSQRT + 3)* count + (NSQRT*NSQRT) +2 ] = intBound.byteValue();
+                count ++;
+            }
+        }
+        if(count != 0){
+            Integer countByte = new Integer(count);
+            bytes[ (NSQRT * NSQRT + 3) * 4] = countByte.byteValue();
+            Integer flagByte = new Integer(5);
+            bytes[ (NSQRT * NSQRT + 3) * 4 + 1] = flagByte.byteValue();
+
+
+            WriteMessage w = sendPort.newMessage();
+            w.writeArray(bytes);
+            w.finish();
+
+            //System.err.println("Board send to Server " + bytes[(NSQRT * NSQRT + 3) * 4]);
+        }
+        waitingMessage = true;
+    }
+
+    /**
+     * send message to notify server this client is ready
+     */
+    private void sendMessage(int result) throws IOException {
+        byte[] bytes = new byte[1];
+        Integer resultInt = new Integer(result);
+        byte resultByte = resultInt.byteValue();
+        bytes[0] = resultByte;
+        WriteMessage w = sendPort.newMessage();
+        w.writeArray(bytes);
+        w.finish();
+        //System.err.println("Message send to Server " + solveResult);
+        waitingMessage = true;
+    }
+
+
+    private int solve(Board board, boolean useCache) throws IOException {
         BoardCache cache = null;
         if (useCache) {
             cache = new BoardCache();
         }
         int solutions;
-        System.err.println("Board bound: "+ board.bound());
 
         expansions = 0;
         if (useCache) {
@@ -95,54 +172,11 @@ public class Client implements MessageUpcall {
 
     }
 
-    public void upcall(ReadMessage message) throws IOException, ClassNotFoundException {
-        System.err.println("Receievced from +" + message.origin().ibisIdentifier());
-        byte[] byteBoard = (byte[]) message.readObject();
-        if(waitingServer){
-            // Ignore first message ready message from server
-            serverReady();
-        }else {
-            Board board = new Board(byteBoard);
-            //System.err.println(board);
-            solveResult = solve(board,true);
-            messageReady();
-        }
-        message.finish();
-    }
-
-
-    /**
-     * send pending children board to server
-     */
-    private void sendBoard(Board[] boards) throws IOException {
-        byte[] bytes = new byte[1];
-        bytes[0] = 1;
-        WriteMessage w = sendPort.newMessage();
-        w.writeArray(bytes);
-        w.finish();
-
-        System.err.println("Send to Server " + bytes[0]);
-        waitingMessage = true;
-    }
-
-    /**
-     * send message to notify server this client is ready
-     */
-    private void sendMessage(int result) throws IOException {
-        byte[] bytes = new byte[1];
-        bytes[0] = 6;
-        WriteMessage w = sendPort.newMessage();
-        w.writeArray(bytes);
-        w.finish();
-        System.err.println("Send to Server " + solveResult);
-        waitingMessage = true;
-    }
-
     /**
      * expands this board into all possible positions, and returns the number of
      * solutions. Will cut off at the bound set in the board.
      */
-    private int solutions(Board board, BoardCache cache) {
+    private int solutions(Board board, BoardCache cache) throws IOException {
         expansions++;
         if (board.distance() == 0) {
             System.err.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>> Gotcha!");
@@ -155,12 +189,33 @@ public class Client implements MessageUpcall {
         }
 
         Board[] children = board.makeMoves(cache);
+        Board targetBoard = null;
+
         int result = 0;
 
+        int best_dist = board.bound();
+
         for (int i = 0; i < children.length; i++) {
-            if (children[i] != null) {
-                result += solutions(children[i], cache);
+            if (children[i] != null && children[i].distance() < best_dist) {
+                best_dist = children[i].distance();
             }
+        }
+        for (int i = 0; i < children.length; i++) {
+            if (children[i] != null && children[i].distance() == best_dist && targetBoard == null) {
+                targetBoard = children[i];
+                children[i] = null;
+                break;
+            }
+        }
+        sendBoard(children);
+        if(targetBoard!=null) {
+            solutions(targetBoard,cache);
+            /*
+            System.err.println(targetBoard);
+            System.err.println("Bound: "+targetBoard.bound());
+            System.err.println("X: "+ targetBoard.getPrevX());
+            System.err.println("Y: "+ targetBoard.getPrevY());
+            */
         }
         cache.put(children);
         return result;
@@ -194,16 +249,16 @@ public class Client implements MessageUpcall {
 
 
 
-
     private void waitingMessage() throws IOException {
         synchronized (this) {
             while (waitingMessage) {
-                System.err.println("Waiting Message");
+                //System.err.println("Waiting Message");
                 try {
                     wait();
                 } catch (Exception e) {
                     // ignored
                 }
+
             }
         }
     }
@@ -231,7 +286,7 @@ public class Client implements MessageUpcall {
         notifyAll();
     }
 
-    synchronized void serverReady(){
+    synchronized void serverReady() throws IOException {
         waitingServer = false;
         notifyAll();
         System.err.println("Server Ready! ");

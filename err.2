@@ -1,8 +1,14 @@
-Server (Ibis 1, location 192@168@0@104)
-Notified  (Ibis 0, location 192@168@0@104)
-Notified  (Ibis 2, location 192@168@0@104)
+Server (Ibis 0, location localhost)
 clientComputing
-Message Size: -1
-1
-Message Size: -1
-1
+Empty waiting
+03:34:22 ERROR [ConnectionHandler] ibis.ipl.impl.ReceivePort - Got unexpected throwable in upcall(), this Java instance will be terminated
+java.lang.IllegalStateException: Queue full
+	at java.util.AbstractQueue.add(AbstractQueue.java:98)
+	at java.util.concurrent.ArrayBlockingQueue.add(ArrayBlockingQueue.java:312)
+	at ida.ipl.Server.upcall(Server.java:232)
+	at ibis.ipl.impl.ReceivePort.doUpcall(ReceivePort.java:597)
+	at ibis.ipl.impl.ReceivePort.messageArrived(ReceivePort.java:649)
+	at ibis.ipl.impl.smartsockets.SmartSocketsReceivePort.messageArrived(SmartSocketsReceivePort.java:284)
+	at ibis.ipl.impl.smartsockets.SmartSocketsReceivePort$ConnectionHandler.reader(SmartSocketsReceivePort.java:162)
+	at ibis.ipl.impl.smartsockets.SmartSocketsReceivePort$ConnectionHandler.run(SmartSocketsReceivePort.java:114)
+	at ibis.util.ThreadPool$PoolThread.run(ThreadPool.java:136)

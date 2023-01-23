@@ -6,6 +6,7 @@ import ibis.ipl.*;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.concurrent.ArrayBlockingQueue;
 
 import static ida.ipl.Board.NSQRT;
 
@@ -20,10 +21,10 @@ public class Server implements MessageUpcall{
     private ibis.ipl.Ibis ibis;
 
 
-    static int QUEUE_SIZE = 10000;
+    static int QUEUE_SIZE = 999999;
     private boolean finished = false;
     private ArrayList<SendPort> sendPorts;
-    private ArrayDeque<Board> jobQueue;
+    private ArrayBlockingQueue<Board> jobQueue;
     private ReceivePort receivePort;
     private Board initialBoard;
     private boolean clientComputing;
@@ -38,7 +39,7 @@ public class Server implements MessageUpcall{
         // Create an ibis instance.
         this.ibis = ibis;
         sendPorts = new ArrayList<SendPort>();
-        jobQueue = new ArrayDeque<>(QUEUE_SIZE);
+        jobQueue = new ArrayBlockingQueue<Board>(QUEUE_SIZE);
         ibis.registry().waitUntilPoolClosed();
         IbisIdentifier[] joinedIbises = ibis.registry().joinedIbises();
         System.err.println("Server "+ibis.identifier());
@@ -54,11 +55,11 @@ public class Server implements MessageUpcall{
     }
 
     private void run() throws IOException {
-        bound = initialBoard.distance();
+        bound = initialBoard.distance() + 6;
         serverReady();
         while (result == 0) {
             initialBoard.setBound(bound);
-            jobQueue.push(initialBoard);
+            jobQueue.add(initialBoard);
             clientComputing = true;
             // Let client expand board
             synchronized (this) {
@@ -70,9 +71,9 @@ public class Server implements MessageUpcall{
                         // ignored
                     }
                 }
+                System.err.println("clientComputing Done");
             }
             bound += 2;
-
         }
         // Close receive port.
         receivePort.close();
@@ -136,43 +137,45 @@ public class Server implements MessageUpcall{
     }
 
     private void sendMessage(IbisIdentifier target) throws IOException {
-        /*
-        if(jobQueue.size() == 0){
-            bound += 2;
-            generateJob(board,bound);
-            synchronized (this) {
+        // If still have job pending and reuslt not found,
+
+        synchronized (this) {
+            while (clientComputing && jobQueue.isEmpty() ) {
+                System.err.println("Empty waiting");
                 try {
                     wait();
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
+                } catch (Exception e) {
+                    // ignored
                 }
             }
         }
-        // If still have job pending and reuslt not found,
-        // Get board and send job to client
-        if(!jobCache.isEmpty() && result == 0){
-            Board board = jobCache.get(jobCache.size()-1);
-            jobCache.remove(jobCache.size()-1);
-            System.err.println(jobCache.size());
-            byte[] byteBoard = new byte[26];
+
+        if(!jobQueue.isEmpty() && result == 0){
+            Board board = jobQueue.poll();
+            //System.err.println("Size: " + jobQueue.size());
+            //System.err.println(board.bound());
+            byte[] byteBoard = new byte[NSQRT*NSQRT + 3];
             byte[] byteBuffer = board.getByteBoard();
             for(int i =0;i<byteBuffer.length;i++){
                 byteBoard[i] = byteBuffer[i];
             }
+            Integer intPrevX = new Integer(board.getPrevX());
+            Integer intPrevY = new Integer(board.getPrevY());
+            Integer intBound = new Integer(bound);
+            byteBoard[NSQRT * NSQRT] = intPrevX.byteValue();
+            byteBoard[NSQRT * NSQRT + 1] = intPrevY.byteValue();
+            byteBoard[NSQRT * NSQRT + 2] = intBound.byteValue();
 
-            Integer a = new Integer(bound);
-            byteBoard[NSQRT * NSQRT] = a.byteValue();
-
-            System.err.println(byteBoard[NSQRT * NSQRT]);
             for (SendPort sendPort :sendPorts){
                 if((sendPort.connectedTo())[0].ibisIdentifier().equals(target)){
                     WriteMessage w = sendPort.newMessage();
                     w.writeArray(byteBoard);
                     w.finish();
                     w.bytesWritten();
-                    System.err.println("Send to: " + target);
+                    //System.err.println("Send to: " + target);
                 }
             }
+
         }else {
             for (SendPort sendPort :sendPorts){
                 // Close ports.
@@ -180,7 +183,6 @@ public class Server implements MessageUpcall{
             }
             setFinished();
         }
-         */
     }
 
 
@@ -191,7 +193,7 @@ public class Server implements MessageUpcall{
             WriteMessage w = sendPort.newMessage();
             w.writeArray(byteBoard);
             w.finish();
-            System.err.println("Notified  " + (sendPort.connectedTo())[0].ibisIdentifier());
+            //System.err.println("Notified  " + (sendPort.connectedTo())[0].ibisIdentifier());
         }
     }
 
@@ -205,8 +207,6 @@ public class Server implements MessageUpcall{
      */
     @Override
     public void upcall(ReadMessage message) throws IOException, ClassNotFoundException {
-        int messageSize = message.size();
-        System.err.println("Message Size: "+ messageSize);
         byte[] clientMessage = (byte[]) message.readObject();
 
         // Request for board
@@ -215,19 +215,40 @@ public class Server implements MessageUpcall{
         }
         // Client send children board
         else if(clientMessage[clientMessage.length-1] == 5){
-
+            byte[] byteBoard = new byte[NSQRT*NSQRT + 3];
+            int count = clientMessage[clientMessage.length-2];
+            //System.err.println("Count: "+ count);
+            for(int i = 0; i < count; i++ ){
+                for(int j = 0; j < NSQRT*NSQRT + 3 ; j++){
+                    byteBoard[j] = clientMessage[(NSQRT*NSQRT + 3) * i +j];
+                }
+                Board board = new Board(byteBoard);
+                /*
+                System.err.println(board);
+                System.err.println("Bound: "+ board.bound());
+                System.err.println("X: "+ board.getPrevX());
+                System.err.println("Y: "+ board.getPrevY());
+                 */
+                jobQueue.add(board);
+            }
         }
         // Result Found
         else if(clientMessage[clientMessage.length-1] == 1){
+            System.err.println("Result Found");
+            result = clientMessage[clientMessage.length-1];
+            if (jobQueue.isEmpty())setClientComputing();
+        }
+        //
+        else if(clientMessage[clientMessage.length-1] == 0){
             result = clientMessage[clientMessage.length-1];
         }
-        System.err.println(clientMessage[clientMessage.length-1]);
         IbisIdentifier identifier = message.origin().ibisIdentifier();
         message.finish();
         sendMessage(identifier);
     }
 
-    synchronized void wakeUp(){
+    synchronized void setClientComputing(){
+        clientComputing = false;
         notifyAll();
     }
 

@@ -234,13 +234,11 @@ public final class Board implements Serializable {
 
         // reset values changed by calls to move()
         distance = calculateBoardDistance();
-        bound = original[NSQRT * NSQRT];
-        System.err.println("Bound  "+ bound + " Dist: " + distance);
-
         blankX = blank%NSQRT;
         blankY = blank/NSQRT;
-        prevDx = 0;
-        prevDy = 0;
+        prevDx = original[NSQRT * NSQRT];
+        prevDy = original[NSQRT * NSQRT + 1];
+        bound = original[NSQRT * NSQRT + 2];
         depth = 0;
     }
 
@@ -425,6 +423,23 @@ public final class Board implements Serializable {
     public byte[] getByteBoard(){
         return board;
     }
+
+    /**
+     * return boad value in byte array
+     * @return
+     */
+    public int getPrevX(){
+        return prevDx;
+    }
+
+    /**
+     * return boad value in byte array
+     * @return
+     */
+    public int getPrevY(){
+        return prevDy;
+    }
+
     /**
      * returns the bound of this board.
      */
