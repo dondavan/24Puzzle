@@ -31,7 +31,6 @@ public class Client implements MessageUpcall {
 
 
     // Coordiante client status
-    private boolean finished = false;
     private boolean waitingMessage = true;
     private boolean waitingServer = true;
     private byte[] byteBoard;
@@ -55,6 +54,8 @@ public class Client implements MessageUpcall {
         run();
 
         ibis.end();
+        System.err.println("Client End");
+
     }
 
     private void receiverConnect() throws Exception{
@@ -90,7 +91,7 @@ public class Client implements MessageUpcall {
     public void upcall(ReadMessage message) throws IOException, ClassNotFoundException {
         //System.err.println("Receievced from +" + message.origin().ibisIdentifier());
         byte[] bytes = (byte[]) message.readObject();
-        if(bytes[bytes.length-1] == RESULT_FOUND){
+        if(bytes[bytes.length-1] == END){
             setFinished();
         }
         if(waitingServer){
@@ -179,7 +180,7 @@ public class Client implements MessageUpcall {
         } else {
             solutions = solutions(board);
         }
-        System.err.println("*******Result is " + solutions +" Expansions: " + expansions);
+        System.err.println("Result is " + solutions +" Expansions: " + expansions);
         return solutions;
 
     }
@@ -295,7 +296,6 @@ public class Client implements MessageUpcall {
     }
 
 
-
     private void waitingMessage() throws IOException {
         synchronized (this) {
             while (waitingMessage) {
@@ -339,20 +339,18 @@ public class Client implements MessageUpcall {
         System.err.println("Server Ready! ");
     }
 
-    synchronized void setFinished() throws IOException {
+    public void setFinished() throws IOException {
         waitingMessage = false;
-        notifyAll();
-
         result = 1;
 
-        // Close receive port.
-        receiver.close();
-        System.err.println("Receiver closed");
         // Close send port.
         sendPort.close();
         System.err.println("Sender closed");
 
-        finished = true;
+        // Close receive port.
+        receiver.close();
+        System.err.println("Receiver closed");
+
     }
 
 }

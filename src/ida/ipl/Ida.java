@@ -93,6 +93,7 @@ final class Ida {
             System.exit(0);
         }
 
+
         System.err.println("Running IDA*, initial board:");
         System.err.println(initialBoard);
 
@@ -109,7 +110,7 @@ final class Ida {
         // constant for each set of parameters. Printing this to standard
         // error
         // makes the output of standard out comparable with "diff"
-        System.err.println("ida took " + (end - start) + " milliseconds");
+        //System.err.println("IPL ida took " + (end - start) + " milliseconds");
     }
 
 }

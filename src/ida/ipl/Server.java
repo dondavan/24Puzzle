@@ -14,11 +14,13 @@ import static ida.ipl.Board.NSQRT;
 public class Server implements MessageUpcall{
 
     /**
-    *   Flag for client message
+     *   Flag for client message
      **/
+    static int END = -1;
     static int SEND_BOARD = 6;
     static int RECV_BOARD = 5;
     static int CUT_OFF_DEPTH = 4;
+    static int SERVER_READY = 3;
     static int RESULT_FOUND = 1;
     static int RESULT_NOT_FOUND = 0;
 
@@ -40,12 +42,31 @@ public class Server implements MessageUpcall{
     private int result = 0;
     private int pendingCoomputing = 0;
     private int bound;
+    static int expansions;
 
 
     // Timer
     long start;
     long end;
 
+    /**
+     *
+     *
+     *      Todo  Waiting message
+     *      can not handle duplicate message
+     *
+     *
+     *
+     *
+     *
+     *
+     *
+     *
+     *
+     * @param ibis
+     * @param initial
+     * @throws Exception
+     */
     public Server(ibis.ipl.Ibis ibis, Board initial) throws Exception{
 
         // Create an ibis instance.
@@ -54,7 +75,6 @@ public class Server implements MessageUpcall{
         jobQueue = new ArrayBlockingQueue<Board>(QUEUE_SIZE);
         ibis.registry().waitUntilPoolClosed();
         IbisIdentifier[] joinedIbises = ibis.registry().joinedIbises();
-        System.err.println("Server "+ibis.identifier());
 
         this.initialBoard = initial;
 
@@ -63,47 +83,45 @@ public class Server implements MessageUpcall{
 
         run();
         setFinished();
-        ibis.end();
 
+        ibis.end();
+        end = System.currentTimeMillis();
+        System.err.println("ida took " + (end - start) + " milliseconds");
     }
 
     private void run() throws IOException {
         bound = initialBoard.distance();
         serverReady();
         start = System.currentTimeMillis();
+
+        System.err.print("Try bound ");
+
         while (result == 0) {
             initialBoard.setBound(bound);
             jobQueue.add(initialBoard);
-            System.err.println(initialBoard);
-            System.err.println("Bound: "+bound);
-            System.err.println("Depth "+ initialBoard.depth());
             clientComputing = true;
+
+            System.err.print(bound + " ");
+
+            expansions = 0;
             // Let client expand board
             synchronized (this) {
                 while (clientComputing) {
-                    System.err.println("clientComputing");
                     try {
                         wait();
                     } catch (Exception e) {
                         // ignored
                     }
                 }
-                System.err.println("clientComputing Done");
             }
             bound += 2;
+            System.err.println("Expansions: " + expansions);
         }
+        System.err.println("\nresult is " + result + " solutions of "
+                + initialBoard.bound() + " steps");
     }
 
-    /*
-    synchronized int generateJob(Board board,int bound){
-        int solutions = 0;
-        board.setBound(bound);
-        System.err.println("Generating job with bound : "+ bound);
-        solutions = expancdSolution(board,jobCache);
-        notifyAll();
-        return solutions;
-    }
-*/
+
 
     private void senderConnect(IbisIdentifier[] ibisIdentifiers) throws Exception {
         for(IbisIdentifier identifier:ibisIdentifiers){
@@ -129,7 +147,6 @@ public class Server implements MessageUpcall{
         if(flag == SEND_BOARD){
             synchronized (this) {
                 while (clientComputing && jobQueue.isEmpty() ) {
-                    System.err.println("Empty waiting");
                     try {
                         wait();
                     } catch (Exception e) {
@@ -178,7 +195,8 @@ public class Server implements MessageUpcall{
     private void serverReady() throws IOException {
         for (SendPort sendPort :sendPorts){
             byte[] byteBoard = new byte[1];
-            byteBoard[0] = 1;
+            Integer intServer = new Integer(SERVER_READY);
+            byteBoard[0] = intServer.byteValue();
             WriteMessage w = sendPort.newMessage();
             w.writeArray(byteBoard);
             w.finish();
@@ -209,23 +227,13 @@ public class Server implements MessageUpcall{
                     byteBoard[j] = clientMessage[(NSQRT*NSQRT + 4) * i +j];
                 }
                 Board board = new Board(byteBoard);
-                //System.err.println("Pushed: + depth "+ board.depth());
-                /*
-                System.err.println("Pushed: ");
-                System.err.println(board);
-                System.err.println("Bound: "+ board.bound());
-                System.err.println("X: "+ board.getPrevX());
-                System.err.println("Y: "+ board.getPrevY());
-*/
+
                 jobQueue.add(board);
             }
         }
         // Result Found
         else if(clientMessage[clientMessage.length-1] == RESULT_FOUND){
-            System.err.println("Result Found");
             result = clientMessage[clientMessage.length-1];
-            end = System.currentTimeMillis();
-            System.err.println("ida took " + (end - start) + " milliseconds");
             setClientComputing();
         }
         //  Client result not found
@@ -244,10 +252,10 @@ public class Server implements MessageUpcall{
         notifyAll();
     }
 
-    synchronized void setFinished() throws IOException {
+    public void setFinished() throws IOException {
         for (SendPort sendPort :sendPorts){
             byte[] bytes = new byte[1];
-            Integer intResult = new Integer(RESULT_FOUND);
+            Integer intResult = new Integer(END);
             bytes[0] = intResult.byteValue();
             WriteMessage w = sendPort.newMessage();
             w.writeArray(bytes);
@@ -259,7 +267,7 @@ public class Server implements MessageUpcall{
             // Close ports.
             sendPort.close();
         }
+
         receivePort.close();
-        System.err.println("receiver closed");
     }
 }
