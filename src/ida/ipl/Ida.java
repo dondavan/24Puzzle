@@ -32,7 +32,7 @@ final class Ida {
             IbisCapabilities.SIGNALS);
 
 
-    public static void run(Board initial) throws Exception {
+    public static void run(Board initial,boolean cache) throws Exception {
         // Create an ibis instance.
         ibis.ipl.Ibis ibis = IbisFactory.createIbis(ibisCapabilities, null,ONE2MANY,MANY2ONE);
         ibis.registry().waitUntilPoolClosed();
@@ -42,7 +42,7 @@ final class Ida {
         if (serverId.equals(ibis.identifier())) {
             Server server = new Server(ibis,initial);
         } else {
-            Client client = new Client(ibis,serverId);
+            Client client = new Client(ibis,serverId,cache);
         }
     }
 
@@ -99,7 +99,7 @@ final class Ida {
 
         long start = System.currentTimeMillis();
         try {
-            run(initialBoard);
+            run(initialBoard,cache);
         } catch (Exception e) {
             e.printStackTrace(System.err);
         }

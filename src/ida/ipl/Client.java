@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.concurrent.ArrayBlockingQueue;
 
 import static ida.ipl.Board.NSQRT;
 import static ida.ipl.Server.*;
@@ -19,7 +20,6 @@ public class Client implements MessageUpcall {
     /**
      *  Ibis properties
      **/
-
     private ibis.ipl.Ibis ibis;
     private ReceivePort receiver;
     static int expansions;
@@ -28,28 +28,37 @@ public class Client implements MessageUpcall {
 
     // Set to 1 when result found
     private int result = 0;
+    private boolean running = true;
 
 
     // Coordiante client status
     private boolean waitingMessage = true;
     private boolean waitingServer = true;
-    private byte[] byteBoard;
-    private Board board;
+    private boolean useCache;
     private int solveResult;
 
-    public Client(ibis.ipl.Ibis ibis,IbisIdentifier serverId) throws Exception {
+    private int requestNum = 0;
 
-        // Create an ibis instance.
+    private ArrayBlockingQueue<Board> jobQueue;     // Job queue
+
+    long start;
+
+    public Client(ibis.ipl.Ibis ibis,IbisIdentifier serverId,boolean useCache) throws Exception {
+
+        // Assign an ibis instance.
         this.ibis = ibis;
         this.serverId = serverId;
-        this.byteBoard = new byte[25];
+        start = System.currentTimeMillis();
         ibis.registry().waitUntilPoolClosed();
-
         System.err.println("CLient "+ibis.identifier());
 
-        // send port to server
+        jobQueue = new ArrayBlockingQueue<Board>(QUEUE_SIZE);
+
+        // Connect to server
         senderConnect();
         receiverConnect();
+
+        this.useCache = useCache;
 
         run();
 
@@ -58,49 +67,34 @@ public class Client implements MessageUpcall {
 
     }
 
-    private void receiverConnect() throws Exception{
-        // Create a receive port, pass ourselves as the message upcall
-        // handler
-        receiver = ibis.createReceivePort(Ida.ONE2MANY, "fromServer",this);
-        // enable connections
-        receiver.enableConnections();
-        // enable upcalls
-        receiver.enableMessageUpcalls();
-
-    }
-
-    private void senderConnect() throws Exception{
-        sendPort = ibis.createSendPort(Ida.MANY2ONE);
-        sendPort.connect(serverId, "toServer");
-    }
-
     private void run() throws IOException {
         waitingServer();
-        while (result == 0){
+        while (running){
             sendMessage(SEND_BOARD);
             waitingMessage();
-            // Double check for message result
-            if(result == 0) {
-                solveResult = solve(board,true);
-                sendMessage(solveResult);
-            }
+            Board board = jobQueue.poll();
+            solveResult = solve(board,useCache);
+            sendMessage(solveResult);
+
         }
     }
 
 
     public void upcall(ReadMessage message) throws IOException, ClassNotFoundException {
-        //System.err.println("Receievced from +" + message.origin().ibisIdentifier());
         byte[] bytes = (byte[]) message.readObject();
+
         if(bytes[bytes.length-1] == END){
             setFinished();
-        }
-        if(waitingServer){
-            // Ignore first message ready message from server
+        }else if(bytes[bytes.length-1] == SERVER_READY){
             serverReady();
-        }else {
-            this.board = new Board(bytes);
+        }else if(bytes[bytes.length-1] == SEND_BOARD){
+            Board newboard = new Board(bytes);
+            jobQueue.add(newboard);
+            System.err.println("Bound: "+ bytes[NSQRT * NSQRT + 2]);
+            System.err.println(newboard);
             messageReady();
         }
+
         message.finish();
     }
 
@@ -108,7 +102,7 @@ public class Client implements MessageUpcall {
     /**
      * send pending children board to server
      */
-    private void sendBoard(Board[] boards) throws IOException {
+    private synchronized void sendBoard(Board[] boards) throws IOException {
 
         // Size for default 4 board, -1 space for flag, -2 space for board amount
         // Each Section : 0-24 board 25 prevX 26 prevY 27 Bound 28 Depth
@@ -140,12 +134,10 @@ public class Client implements MessageUpcall {
             Integer flagByte = new Integer(5);
             bytes[ (NSQRT * NSQRT + 4) * 4 + 1] = flagByte.byteValue();
 
-
             WriteMessage w = sendPort.newMessage();
             w.writeArray(bytes);
+            System.err.println("sent "+ count + "board");
             w.finish();
-
-            //System.err.println("Board send to Server " + bytes[(NSQRT * NSQRT + 3) * 4]);
         }
         waitingMessage = true;
     }
@@ -153,21 +145,23 @@ public class Client implements MessageUpcall {
     /**
      * send message to notify server this client is ready
      */
-    private void sendMessage(int result) throws IOException {
-        byte[] bytes = new byte[1];
-        Integer resultInt = new Integer(result);
-        byte resultByte = resultInt.byteValue();
-        bytes[0] = resultByte;
+    private synchronized void sendMessage(int flag) throws IOException {
+        byte[] bytes = new byte[2];
+        Integer flagInt = new Integer(flag);
+        Integer numInt = new Integer(requestNum);
+        byte numByte = numInt.byteValue();
+        byte flagByte = flagInt.byteValue();
+        bytes[0] = numByte;
+        bytes[1] = flagByte;
         WriteMessage w = sendPort.newMessage();
         w.writeArray(bytes);
         w.finish();
-        //System.err.println("Message send to Server " + solveResult);
+        //System.err.println("Send: "+flag);
         waitingMessage = true;
     }
 
 
-    private int solve(Board board, boolean useCache) throws IOException {
-        //System.err.println("Compute Depth:"+ board.depth());
+    private synchronized int solve(Board board, boolean useCache) throws IOException {
         BoardCache cache = null;
         if (useCache) {
             cache = new BoardCache();
@@ -180,7 +174,7 @@ public class Client implements MessageUpcall {
         } else {
             solutions = solutions(board);
         }
-        System.err.println("Result is " + solutions +" Expansions: " + expansions);
+        //System.err.println("Result is " + solutions +" Expansions: " + expansions);
         return solutions;
 
     }
@@ -194,10 +188,10 @@ public class Client implements MessageUpcall {
         if (board.distance() == 0) {
             System.err.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>> Gotcha!");
             System.err.println(board);
+            System.err.println(board.depth());
             return 1;
         }
 
-        //System.err.println("Depth: "+ board.depth() + " Dist: " + board.distance() + " Bound: " + board.bound());
         if (board.distance() > board.bound()) {
             return 0;
         }
@@ -205,30 +199,11 @@ public class Client implements MessageUpcall {
         Board[] children = board.makeMoves(cache, board.depth());
         int result = 0;
 
-        /*
-        for (int i = 0; i < children.length; i++) {
-            if (children[i] != null ) {
-                System.err.println(children[i]);
-                System.err.println("Bound: "+ children[i].bound());
-                System.err.println("Dist: "+ children[i].distance());
-                System.err.println("X: "+ children[i].getPrevX());
-                System.err.println("Y: "+ children[i].getPrevY());
-            }
-        }*/
         if(board.depth() < CUT_OFF_DEPTH){
 
             Board targetBoard = null;
             int best_dist = board.bound();
-            /*
-            for (int i = 0; i < children.length; i++) {
-                if (children[i] != null ) {
-                    System.err.println(children[i]);
-                    System.err.println("Bound: "+ children[i].bound());
-                    System.err.println("Dist: "+ children[i].distance());
-                    System.err.println("Depth: "+ children[i].depth());
-                }
-            }
-             */
+
             for (int i = 0; i < children.length; i++) {
                 if (children[i] != null && children[i].distance() < best_dist) {
                     best_dist = children[i].distance();
@@ -251,12 +226,6 @@ public class Client implements MessageUpcall {
             sendBoard(children);
             if(targetBoard!=null) {
                 result += solutions(targetBoard,cache);
-            /*
-            System.err.println(targetBoard);
-            System.err.println("Bound: "+targetBoard.bound());
-            System.err.println("X: "+ targetBoard.getPrevX());
-            System.err.println("Y: "+ targetBoard.getPrevY());
-            */
             }
         }else {
             for (int i = 0; i < children.length; i++) {
@@ -296,10 +265,13 @@ public class Client implements MessageUpcall {
     }
 
 
+    /**
+     * Client wait server to sent message
+     * @throws IOException
+     */
     private void waitingMessage() throws IOException {
         synchronized (this) {
             while (waitingMessage) {
-                //System.err.println("Waiting Message");
                 try {
                     wait();
                 } catch (Exception e) {
@@ -341,7 +313,7 @@ public class Client implements MessageUpcall {
 
     public void setFinished() throws IOException {
         waitingMessage = false;
-        result = 1;
+        running = false;
 
         // Close send port.
         sendPort.close();
@@ -352,5 +324,30 @@ public class Client implements MessageUpcall {
         System.err.println("Receiver closed");
 
     }
+
+    /**
+     * Receive port connect to server
+     * @throws Exception
+     */
+    private void receiverConnect() throws Exception{
+        // Create a receive port, pass ourselves as the message upcall
+        // handler
+        receiver = ibis.createReceivePort(Ida.ONE2MANY, "fromServer",this);
+        // enable connections
+        receiver.enableConnections();
+        // enable upcalls
+        receiver.enableMessageUpcalls();
+
+    }
+
+    /**
+     * Send port connect to Server
+     * @throws Exception
+     */
+    private void senderConnect() throws Exception{
+        sendPort = ibis.createSendPort(Ida.MANY2ONE);
+        sendPort.connect(serverId, "toServer");
+    }
+
 
 }
