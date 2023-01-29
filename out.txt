@@ -8,7 +8,7 @@ Running IDA*, initial board:
 Try bound 91 Expansions: 9
 93 Expansions: 47
 95 Expansions: 927
-97 Expansions: 14347-
+97 Expansions: 14347
 99 Expansions: 298329
 101 Expansions: 6350272
 103 >>>>>>>>>>>>>>>>>>>>>>>>>>>>> Gotcha!

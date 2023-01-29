@@ -3,12 +3,10 @@ package ida.ipl;
 
 import ida.ipl.BoardCache;
 
-import java.io.Serializable;
-
 import java.io.FileInputStream;
-import java.io.PrintStream;
 import java.io.IOException;
-import java.util.ArrayList;
+import java.io.PrintStream;
+import java.io.Serializable;
 import java.util.Arrays;
 import java.util.NoSuchElementException;
 import java.util.Scanner;
@@ -34,12 +32,12 @@ public final class Board implements Serializable {
     static final int BRANCH_FACTOR = 4;
 
     // positions of all the tiles in the goal position
-    private static Board.Position[] goal = new Board.Position[NPUZZLE + 1];
+    private static Position[] goal = new Position[NPUZZLE + 1];
 
     // static initializer of goal
     static {
         for (int i = 0; i <= NPUZZLE; i++) {
-            goal[i] = new Board.Position();
+            goal[i] = new Position();
         }
 
         int v = 0;
@@ -219,7 +217,7 @@ public final class Board implements Serializable {
         distance = calculateBoardDistance();
     }
 
-    public void save(String fileName) throws java.io.IOException {
+    public void save(String fileName) throws IOException {
         PrintStream fout = new PrintStream(fileName);
         fout.print(this);
         fout.close();
@@ -367,7 +365,7 @@ public final class Board implements Serializable {
      * does not "undo" the move which created this board. Elements in the
      * returned array may be "null".
      */
-    public Board[] makeMoves(BoardCache cache,int parentDepth) {
+    public Board[] makeMoves(BoardCache cache, int parentDepth) {
         Board[] result = new Board[BRANCH_FACTOR];
         int n = 0;
 
