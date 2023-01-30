@@ -43,10 +43,10 @@ public class Server implements MessageUpcall{
     private ReceivePort receivePort;
     private boolean useCache;
     private Board initialBoard;
-    Board localboard;
 
     // Set to 1 when result found
     private int result = 0;
+    private int shortest_slides = 0;
     private int bound;
     static int expansions;
     int count = 0;
@@ -68,17 +68,17 @@ public class Server implements MessageUpcall{
         waitingMessageSet = new ArrayBlockingQueue<IbisIdentifier>(100);
         computingSet = new ArrayBlockingQueue<IbisIdentifier>(100);
         doneSet = new ArrayBlockingQueue<IbisIdentifier>(100);
+        jobQueue = new ArrayBlockingQueue<Board>(QUEUE_SIZE);
+        sendPorts = new ArrayList<SendPort>();
 
         /* Assign ibis instance. */
         this.ibis = ibis;
-        sendPorts = new ArrayList<SendPort>();
-        /* Store initial board in job queue*/
-        this.initialBoard = initial;
-        jobQueue = new ArrayBlockingQueue<Board>(QUEUE_SIZE);
-
         ibis.registry().waitUntilPoolClosed();
         IbisIdentifier[] joinedIbises = ibis.registry().joinedIbises();
 
+        /* Store initial board in job queue*/
+        this.initialBoard = initial;
+        this.useCache = useCache;
         // Connnect to client
         receiverConnect();
         senderConnect(joinedIbises);
@@ -97,6 +97,7 @@ public class Server implements MessageUpcall{
 
     private void run() throws IOException {
         bound = initialBoard.distance();
+        shortest_slides = bound;
         serverReady();
 
         System.out.print("Try bound ");
@@ -108,19 +109,16 @@ public class Server implements MessageUpcall{
             initialBoard.setBound(bound);
             jobQueue.add(initialBoard);
 
-            //System.err.println("Jobs "+jobQueue.size());
-
-
             System.out.print(bound + " ");
             System.out.flush();
 
             Board board = jobQueue.poll();
 
-            result = solve(board,true);
+            result = solve(board,useCache);
 
             long startnano = System.nanoTime();
             // Bound iteration finishes when job queue  is empty and all client done computing
-            while (!jobQueue.isEmpty() && result == 0) {
+            while (!jobQueue.isEmpty()) {
 
                 // Wait till client request for job
                 while(waitingMessageSet.isEmpty()){
@@ -140,8 +138,16 @@ public class Server implements MessageUpcall{
                     }
                 }
 
-
             }
+            // Wait till client finishes job
+            while(computingSet.size() != 0){
+                try {
+                    wait();
+                } catch (Exception e) {
+                    // ignored
+                }
+            }
+
 
             long endnano = System.nanoTime();
             bound += 2;
@@ -163,7 +169,6 @@ public class Server implements MessageUpcall{
     @Override
     public void upcall(ReadMessage message) throws IOException, ClassNotFoundException {
         byte[] clientMessage = (byte[]) message.readObject();
-        int flag = clientMessage[clientMessage.length-1];
         IbisIdentifier identifier = message.origin().ibisIdentifier();
 
         // Client request for job
@@ -177,7 +182,6 @@ public class Server implements MessageUpcall{
         else if(clientMessage[clientMessage.length-1] == RECV_BOARD){
             byte[] byteBoard = new byte[NSQRT*NSQRT + 4];
             int count = clientMessage[clientMessage.length-2];
-            //System.err.println("Count: "+ count);
             for(int i = 0; i < count; i++ ){
                 for(int j = 0; j < NSQRT*NSQRT + 4 ; j++){
                     byteBoard[j] = clientMessage[(NSQRT*NSQRT + 4) * i +j];
@@ -189,10 +193,10 @@ public class Server implements MessageUpcall{
         // Result Found
         else if(clientMessage[clientMessage.length-1] == RESULT_FOUND){
             ByteBuffer buf = ByteBuffer.wrap(clientMessage);
-            expansions += buf.getInt(0);
+            result += buf.getInt(0);
+            expansions += buf.getInt(8);
             comp2Done(identifier);
             end = System.currentTimeMillis();
-            result = clientMessage[clientMessage.length-1];
             wakeUp();
         }
         // Receive result board
@@ -206,13 +210,16 @@ public class Server implements MessageUpcall{
                 }
                 Board board = new Board(byteBoard);
                 System.err.println(board);
+                if(board.depth() < shortest_slides){
+                    shortest_slides = board.depth();
+                }
             }
 
         }
         //  Client result not found
         else if(clientMessage[clientMessage.length-1] == RESULT_NOT_FOUND){
             ByteBuffer buf = ByteBuffer.wrap(clientMessage);
-            expansions += buf.getInt(0);
+            expansions += buf.getInt(8);
             comp2Done(identifier);
             wakeUp();
         }
@@ -234,16 +241,16 @@ public class Server implements MessageUpcall{
         for(int i =0;i<byteBuffer.length;i++){
             byteBoard[i] = byteBuffer[i];
         }
-        Integer intPrevX = new Integer(board.getPrevX());
-        Integer intPrevY = new Integer(board.getPrevY());
-        Integer intBound = new Integer(board.bound());
-        Integer intDepth = new Integer(board.depth());
-        Integer intFlag = new Integer(SEND_BOARD);
-        byteBoard[NSQRT * NSQRT] = intPrevX.byteValue();
-        byteBoard[NSQRT * NSQRT + 1] = intPrevY.byteValue();
-        byteBoard[NSQRT * NSQRT + 2] = intBound.byteValue();
-        byteBoard[NSQRT * NSQRT + 3] = intDepth.byteValue();
-        byteBoard[NSQRT * NSQRT + 4] = intFlag.byteValue();
+        int intPrevX = board.getPrevX();
+        int intPrevY = board.getPrevY();
+        int intBound = board.bound();
+        int intDepth = board.depth();
+        int intFlag = SEND_BOARD;
+        byteBoard[NSQRT * NSQRT] = (byte) intPrevX;
+        byteBoard[NSQRT * NSQRT + 1] = (byte) intPrevY;
+        byteBoard[NSQRT * NSQRT + 2] = (byte) intBound;
+        byteBoard[NSQRT * NSQRT + 3] = (byte) intDepth;
+        byteBoard[NSQRT * NSQRT + 4] = (byte) intFlag;
 
         for (SendPort sendPort :sendPorts){
             if((sendPort.connectedTo())[0].ibisIdentifier().equals(target)){
@@ -336,10 +343,9 @@ public class Server implements MessageUpcall{
      * expands this board into all possible positions, and returns the number of
      * solutions. Will cut off at the bound set in the board.
      */
-    private int solutions(Board board) {
+    private int solutions(Board board) throws IOException {
         expansions++;
         if (board.distance() == 0) {
-            System.err.println(board);
             return 1;
         }
 
@@ -349,10 +355,37 @@ public class Server implements MessageUpcall{
 
         Board[] children = board.makeMoves(board.depth());
         int result = 0;
-        for (int i = 0; i < children.length; i++) {
-            if (children[i] != null) {
-                result += solutions(children[i]);
+
+        /*
+            Search space depth < MAXHOP
+            Else generate job and add to queue
+         */
+        if(board.depth() < MAXHOPS){
+
+            for (int i = 0; i < children.length; i++) {
+                if (children[i] != null) {
+                    result += solutions(children[i]);
+                }
             }
+
+        }else if(board.depth() == MAXHOPS){
+
+            for (int i = 0; i < children.length; i++) {
+                if (children[i] != null) {
+                    jobQueue.add(children[i]);
+                    //System.err.println("Added depth: "+children[i].depth() + " Bound "+ children[i].bound());
+                }
+            }
+            //System.out.println("added");
+            while(jobQueue.size()>clientSize && !waitingMessageSet.isEmpty()){
+                Iterator ID_iterator = waitingMessageSet.iterator();
+                while (ID_iterator.hasNext() && !jobQueue.isEmpty()) {
+                    IbisIdentifier target = (IbisIdentifier) ID_iterator.next();
+                    sendBoard(target);
+                    //System.out.println("Send");
+                }
+            }
+            return 0;
         }
         return result;
     }
