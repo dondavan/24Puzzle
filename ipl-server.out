@@ -1,16 +1,18 @@
-Ibis server running on 192.168.0.100-8888#3a.52.ae.02.58.7e.00.00.64.72.d7.b7.99.8a.3a.94~thhugh+22
+Ibis server running on 192.168.0.100-8888#5e.b8.6a.09.58.7e.00.00.96.53.67.c1.a9.60.0e.8e~thhugh+22
 List of Services:
     Central Registry service on virtual port 302
     Management service on virtual port 304
     Bootstrap service on virtual port 303
-Known hubs now: 192.168.0.100-8888#3a.52.ae.02.58.7e.00.00.64.72.d7.b7.99.8a.3a.94~thhugh+22
-22:45:20 Central Registry: creating new pool: "pool24472"
-22:45:20 Central Registry: (Ibis 0, location 192@168@0@100) joined pool "pool24472" now 1 members
-22:45:20 Central Registry: (Ibis 1, location 192@168@0@100) joined pool "pool24472" now 2 members
-22:45:20 Central Registry: pool "pool24472" now closed
-22:45:20 Central Registry: (Ibis 0, location 192@168@0@100) won election "Server" in pool "pool24472"
-22:45:30 ERROR [server connection handler] ibis.ipl.registry.central.server.ServerConnectionHandler - error on handling connection
-java.lang.Exception: pool pool14017 not found
-	at ibis.ipl.registry.central.server.ServerConnectionHandler.handleHeartbeat(ServerConnectionHandler.java:393)
-	at ibis.ipl.registry.central.server.ServerConnectionHandler.run(ServerConnectionHandler.java:523)
-	at ibis.util.ThreadPool$PoolThread.run(ThreadPool.java:136)
+Known hubs now: 192.168.0.100-8888#5e.b8.6a.09.58.7e.00.00.96.53.67.c1.a9.60.0e.8e~thhugh+22
+01:53:41 Central Registry: creating new pool: "pool33020"
+01:53:41 Central Registry: (Ibis 0, location 192@168@0@100) joined pool "pool33020" now 1 members
+01:53:41 Central Registry: (Ibis 1, location 192@168@0@100) joined pool "pool33020" now 2 members
+01:53:41 Central Registry: (Ibis 2, location 192@168@0@100) joined pool "pool33020" now 3 members
+01:53:42 Central Registry: (Ibis 3, location 192@168@0@100) joined pool "pool33020" now 4 members
+01:53:42 Central Registry: pool "pool33020" now closed
+01:53:42 Central Registry: (Ibis 2, location 192@168@0@100) won election "Server" in pool "pool33020"
+01:53:43 Central Registry: (Ibis 1, location 192@168@0@100) left pool "pool33020" now 3 members
+01:53:43 Central Registry: (Ibis 0, location 192@168@0@100) left pool "pool33020" now 2 members
+01:53:44 Central Registry: (Ibis 2, location 192@168@0@100) left pool "pool33020" now 1 members
+01:53:44 Central Registry: (Ibis 3, location 192@168@0@100) left pool "pool33020" now 0 members
+01:53:44 Central Registry: pool "pool33020" ended

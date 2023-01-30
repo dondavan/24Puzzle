@@ -1,10 +1,11 @@
 package ida.ipl;
 
 import ibis.ipl.*;
-import ida.ipl.Ida;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.concurrent.ArrayBlockingQueue;
 
 import static ida.ipl.Board.NSQRT;
@@ -39,14 +40,12 @@ public class Client implements MessageUpcall {
 
     private ArrayBlockingQueue<Board> jobQueue;     // Job queue
 
-    long start;
-
+    long total = 0;
     public Client(Ibis ibis, IbisIdentifier serverId, boolean useCache) throws Exception {
 
         // Assign an ibis instance.
         this.ibis = ibis;
         this.serverId = serverId;
-        start = System.currentTimeMillis();
         ibis.registry().waitUntilPoolClosed();
 
         jobQueue = new ArrayBlockingQueue<Board>(QUEUE_SIZE);
@@ -59,7 +58,8 @@ public class Client implements MessageUpcall {
 
         run();
         ibis.end();
-        System.err.println("CLient Computed "+ count);
+        System.err.println("Total"+ total/1000000);
+        System.err.println("CLient average time"+ (total/ count));
     }
 
     private void run() throws IOException {
@@ -69,8 +69,15 @@ public class Client implements MessageUpcall {
             waitingMessage();
             if(!jobQueue.isEmpty()){
                 Board board = jobQueue.poll();
+
+                count ++;
+                long start = System.nanoTime();
                 solveResult = solve(board,useCache);
+                long end = System.nanoTime();
+                total += (end-start);
+                // if result found, sendboard inside solve() will be called
                 sendMessage(solveResult,expansions);
+
                 count++;
             }
         }
@@ -97,7 +104,7 @@ public class Client implements MessageUpcall {
     /**
      * send pending children board to server
      */
-    private synchronized void sendBoard(Board[] boards, int flag) throws IOException {
+    private synchronized void sendBoard(Board[] boards,int flag) throws IOException {
 
         // Size for default 4 board, -1 space for flag, -2 space for board amount
         // Each Section : 0-24 board 25 prevX 26 prevY 27 Bound 28 Depth
@@ -118,8 +125,6 @@ public class Client implements MessageUpcall {
                 bytes[(NSQRT*NSQRT + 4)* count + (NSQRT*NSQRT) +2 ] = intBound.byteValue();
                 Integer intDepth = new Integer(boards[i].depth());
                 bytes[(NSQRT*NSQRT + 4)* count + (NSQRT*NSQRT) +3 ] = intDepth.byteValue();
-
-                count ++;
             }
         }
         if(count != 0){
@@ -149,10 +154,12 @@ public class Client implements MessageUpcall {
         buf.putInt(payload);
         buf.put(bytes.length-1,flagByte);
 
-        WriteMessage w = sendPort.newMessage();
-        w.writeArray(bytes);
-        w.finish();
-        waitingMessage = true;
+        if (running) {
+            WriteMessage w = sendPort.newMessage();
+            w.writeArray(bytes);
+            w.finish();
+            waitingMessage = true;
+        }
     }
 
 
@@ -179,6 +186,7 @@ public class Client implements MessageUpcall {
      */
     private int solutions(Board board, BoardCache cache) throws IOException {
         expansions++;
+
         if (board.distance() == 0) {
             Board[] result = new Board[1];
             result[0] = board;
@@ -193,37 +201,9 @@ public class Client implements MessageUpcall {
         Board[] children = board.makeMoves(cache, board.depth());
         int result = 0;
 
-        if(board.depth() < CUT_OFF_DEPTH){
-
-            Board targetBoard = null;
-            int best_dist = board.bound();
-
-            for (int i = 0; i < children.length; i++) {
-                if (children[i] != null && children[i].distance() < best_dist) {
-                    best_dist = children[i].distance();
-                }
-                // Cut of unqualified child
-                if(children[i] != null && children[i].distance() > children[i].bound()){
-                    children[i] = null;
-                    expansions++;
-                }
-            }
-            for (int i = 0; i < children.length; i++) {
-                if (children[i] != null && children[i].distance() == best_dist && targetBoard == null) {
-                    targetBoard = children[i];
-                    children[i] = null;
-                    break;
-                }
-            }
-            sendBoard(children,RECV_BOARD);
-            if(targetBoard!=null) {
-                result += solutions(targetBoard,cache);
-            }
-        }else {
-            for (int i = 0; i < children.length; i++) {
-                if (children[i] != null) {
-                    result += solutions(children[i], cache);
-                }
+        for (int i = 0; i < children.length; i++) {
+            if (children[i] != null) {
+                result += solutions(children[i], cache);
             }
         }
 

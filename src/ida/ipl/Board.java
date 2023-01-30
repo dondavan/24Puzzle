@@ -3,10 +3,12 @@ package ida.ipl;
 
 import ida.ipl.BoardCache;
 
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.PrintStream;
 import java.io.Serializable;
+
+import java.io.FileInputStream;
+import java.io.PrintStream;
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.NoSuchElementException;
 import java.util.Scanner;
@@ -365,7 +367,7 @@ public final class Board implements Serializable {
      * does not "undo" the move which created this board. Elements in the
      * returned array may be "null".
      */
-    public Board[] makeMoves(BoardCache cache, int parentDepth) {
+    public Board[] makeMoves(BoardCache cache,int parentDepth) {
         Board[] result = new Board[BRANCH_FACTOR];
         int n = 0;
 

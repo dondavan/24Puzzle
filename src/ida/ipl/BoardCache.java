@@ -1,6 +1,8 @@
 package ida.ipl;
 
 
+import ida.ipl.Board;
+
 public class BoardCache {
 
     public static final int MAX_CACHE_SIZE = 10 * 1024;

@@ -5,7 +5,9 @@ import ibis.ipl.IbisCapabilities;
 import ibis.ipl.IbisFactory;
 import ibis.ipl.IbisIdentifier;
 import ibis.ipl.PortType;
-import ida.ipl.Server;
+
+import java.util.ArrayList;
+import java.util.List;
 
 final class Ida {
 
@@ -30,7 +32,7 @@ final class Ida {
             IbisCapabilities.SIGNALS);
 
 
-    public static void run(Board initial, boolean cache) throws Exception {
+    public static void run(Board initial,boolean cache) throws Exception {
         // Create an ibis instance.
         ibis.ipl.Ibis ibis = IbisFactory.createIbis(ibisCapabilities, null,ONE2MANY,MANY2ONE);
         ibis.registry().waitUntilPoolClosed();
@@ -38,7 +40,7 @@ final class Ida {
         IbisIdentifier serverId = ibis.registry().elect("Server");
         // If I am the server, run server, else run client.
         if (serverId.equals(ibis.identifier())) {
-            Server server = new Server(ibis,initial);
+            Server server = new Server(ibis,initial,cache);
         } else {
             Client client = new Client(ibis,serverId,cache);
         }
