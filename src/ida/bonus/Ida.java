@@ -5,25 +5,23 @@ import ibis.ipl.IbisCapabilities;
 import ibis.ipl.IbisFactory;
 import ibis.ipl.IbisIdentifier;
 import ibis.ipl.PortType;
-import ida.ipl.Board;
-import ida.ipl.Client;
-import ida.ipl.Server;
+import ida.bonus.*;
 
 final class Ida {
 
     static int expansions;
-
-    static PortType ONE2MANY = new PortType(
-            PortType.COMMUNICATION_RELIABLE,
-            PortType.SERIALIZATION_OBJECT,
-            PortType.RECEIVE_AUTO_UPCALLS,
-            PortType.CONNECTION_ONE_TO_MANY);
 
     static PortType MANY2ONE = new PortType(
             PortType.COMMUNICATION_RELIABLE,
             PortType.SERIALIZATION_OBJECT,
             PortType.RECEIVE_AUTO_UPCALLS,
             PortType.CONNECTION_MANY_TO_ONE);
+
+    static PortType ONE2MANY = new PortType(
+            PortType.COMMUNICATION_RELIABLE,
+            PortType.SERIALIZATION_OBJECT,
+            PortType.RECEIVE_AUTO_UPCALLS,
+            PortType.CONNECTION_ONE_TO_MANY);
 
     static IbisCapabilities ibisCapabilities = new IbisCapabilities(
             IbisCapabilities.CLOSED_WORLD,
@@ -32,17 +30,17 @@ final class Ida {
             IbisCapabilities.SIGNALS);
 
 
-    public static void run(ida.ipl.Board initial, boolean cache) throws Exception {
+    public static void run(Board initial, boolean cache) throws Exception {
         // Create an ibis instance.
-        ibis.ipl.Ibis ibis = IbisFactory.createIbis(ibisCapabilities, null,ONE2MANY,MANY2ONE);
+        ibis.ipl.Ibis ibis = IbisFactory.createIbis(ibisCapabilities, null,MANY2ONE,ONE2MANY);
         ibis.registry().waitUntilPoolClosed();
         // Elect a server
-        IbisIdentifier serverId = ibis.registry().elect("Server");
+        IbisIdentifier serverId = ibis.registry().elect("StartNode");
         // If I am the server, run server, else run client.
         if (serverId.equals(ibis.identifier())) {
-            Server server = new Server(ibis,initial);
+            Node server = new Node(ibis,initial);
         } else {
-            ida.ipl.Client client = new Client(ibis,serverId,cache);
+            Node server = new Node(ibis,null);
         }
     }
 
@@ -52,8 +50,7 @@ final class Ida {
         String saveFile = null;
 
         /* Use suitable default value. */
-        //int length = 103;
-        int length = 104;
+        int length = 7750;
 
         for (int i = 0; i < args.length; i++) {
             if (args[i].equals("--file")) {
@@ -72,10 +69,10 @@ final class Ida {
             }
         }
 
-        ida.ipl.Board initialBoard = null;
+        Board initialBoard = null;
 
         if (fileName == null) {
-            initialBoard = new ida.ipl.Board(length);
+            initialBoard = new Board(length);
         } else {
             try {
                 initialBoard = new Board(fileName);

@@ -218,7 +218,6 @@ public class Server implements MessageUpcall{
      */
     private synchronized void sendBoard(IbisIdentifier target) throws IOException {
         Board board = jobQueue.poll();
-        //System.err.println("Queue Job Depth: " + board.depth());
         byte[] byteBoard = new byte[NSQRT*NSQRT + 5];
         byte[] byteBuffer = board.getByteBoard();
         for(int i =0;i<byteBuffer.length;i++){
@@ -303,7 +302,6 @@ public class Server implements MessageUpcall{
             for (int i = 0; i < children.length; i++) {
                 if (children[i] != null) {
                     jobQueue.add(children[i]);
-                    //System.err.println("Added depth: "+children[i].depth() + " Bound "+ children[i].bound());
                 }
             }
             //System.out.println("added");
@@ -312,7 +310,6 @@ public class Server implements MessageUpcall{
                 while (ID_iterator.hasNext() && !jobQueue.isEmpty()) {
                     IbisIdentifier target = (IbisIdentifier) ID_iterator.next();
                     sendBoard(target);
-                    //System.out.println("Send");
                 }
             }
             return 0;
@@ -425,9 +422,8 @@ public class Server implements MessageUpcall{
             w.finish();
         }
 
-        // Close receive port.
+        // Close ports.
         for (SendPort sendPort :sendPorts){
-            // Close ports.
             sendPort.close();
         }
 

@@ -1,7 +1,7 @@
 package ida.bonus;
 
 
-import ida.ipl.BoardCache;
+import ida.bonus.BoardCache;
 
 import java.io.FileInputStream;
 import java.io.IOException;

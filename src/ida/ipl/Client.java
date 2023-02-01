@@ -36,7 +36,6 @@ public class Client implements MessageUpcall {
     private boolean useCache;
     private int solveResult;
 
-    private int count = 0;
 
     private ArrayBlockingQueue<Board> jobQueue;     // Job queue
 
@@ -69,7 +68,6 @@ public class Client implements MessageUpcall {
             if(!jobQueue.isEmpty()){
                 Board board = jobQueue.poll();
 
-                count ++;
                 long start = System.nanoTime();
                 solveResult = solve(board,useCache);
                 long end = System.nanoTime();
@@ -78,7 +76,6 @@ public class Client implements MessageUpcall {
                 if(solveResult !=0 ) sendMessage(solveResult,expansions,RESULT_FOUND);
                 else sendMessage(solveResult,expansions,RESULT_NOT_FOUND);
 
-                count++;
             }
         }
     }
