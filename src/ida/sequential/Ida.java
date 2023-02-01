@@ -96,7 +96,7 @@ final class Ida {
         String saveFile = null;
 
 		/* Use suitable default value. */
-		int length = 7750;
+		int length = 103;
 		//int length = 104;
 
 		for (int i = 0; i < args.length; i++) {

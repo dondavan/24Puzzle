@@ -59,8 +59,6 @@ public class Client implements MessageUpcall {
 
         run();
         ibis.end();
-        System.err.println("Total"+ total/1000000);
-        System.err.println("CLient average time"+ (total/ count));
     }
 
     private void run() throws IOException {
@@ -223,7 +221,6 @@ public class Client implements MessageUpcall {
      */
     private synchronized void sendMessage(int result, int expansion,int flag) throws IOException {
         // result + expansion + flag
-        //    8   +     8     +  8
         byte[] bytes = new byte[24];
 
         ByteBuffer buf = ByteBuffer.wrap(bytes);
@@ -291,7 +288,6 @@ public class Client implements MessageUpcall {
 
         // Close send port.
         sendPort.close();
-        System.err.println("Sender closed");
         notifyAll();
     }
 

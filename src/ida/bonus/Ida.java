@@ -1,15 +1,17 @@
-package ida.ipl;
+package ida.bonus;
 
 
 import ibis.ipl.IbisCapabilities;
 import ibis.ipl.IbisFactory;
 import ibis.ipl.IbisIdentifier;
 import ibis.ipl.PortType;
-
-import java.util.ArrayList;
-import java.util.List;
+import ida.ipl.Board;
+import ida.ipl.Client;
+import ida.ipl.Server;
 
 final class Ida {
+
+    static int expansions;
 
     static PortType ONE2MANY = new PortType(
             PortType.COMMUNICATION_RELIABLE,
@@ -30,7 +32,7 @@ final class Ida {
             IbisCapabilities.SIGNALS);
 
 
-    public static void run(Board initial,boolean cache) throws Exception {
+    public static void run(ida.ipl.Board initial, boolean cache) throws Exception {
         // Create an ibis instance.
         ibis.ipl.Ibis ibis = IbisFactory.createIbis(ibisCapabilities, null,ONE2MANY,MANY2ONE);
         ibis.registry().waitUntilPoolClosed();
@@ -38,9 +40,9 @@ final class Ida {
         IbisIdentifier serverId = ibis.registry().elect("Server");
         // If I am the server, run server, else run client.
         if (serverId.equals(ibis.identifier())) {
-            Server server = new Server(ibis,initial,cache);
+            Server server = new Server(ibis,initial);
         } else {
-            Client client = new Client(ibis,serverId,cache);
+            ida.ipl.Client client = new Client(ibis,serverId,cache);
         }
     }
 
@@ -50,7 +52,8 @@ final class Ida {
         String saveFile = null;
 
         /* Use suitable default value. */
-        int length = 103;
+        //int length = 103;
+        int length = 104;
 
         for (int i = 0; i < args.length; i++) {
             if (args[i].equals("--file")) {
@@ -69,10 +72,10 @@ final class Ida {
             }
         }
 
-        Board initialBoard = null;
+        ida.ipl.Board initialBoard = null;
 
         if (fileName == null) {
-            initialBoard = new Board(length);
+            initialBoard = new ida.ipl.Board(length);
         } else {
             try {
                 initialBoard = new Board(fileName);

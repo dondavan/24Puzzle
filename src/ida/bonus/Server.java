@@ -1,13 +1,14 @@
-package ida.ipl;
+package ida.bonus;
 
 import ibis.ipl.*;
+import ida.ipl.Board;
+import ida.ipl.BoardCache;
+import ida.ipl.Ida;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.Iterator;
-import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 
 import static ida.ipl.Board.NSQRT;
@@ -28,8 +29,7 @@ public class Server implements MessageUpcall{
     static int RESULT_FOUND = 1;
     static int RESULT_NOT_FOUND = 0;
 
-
-    static int MAXHOPS = 6;
+    static int MAXHOP = 6;
 
     /**
      *  Ibis properties
@@ -37,19 +37,16 @@ public class Server implements MessageUpcall{
     private Ibis ibis;
 
 
-    static int QUEUE_SIZE = 100000;
+    static int QUEUE_SIZE = 10000;
     private ArrayList<SendPort> sendPorts;          // Save send port to client
-    private ArrayBlockingQueue<Board> jobQueue;     // Job queue
+    private ArrayBlockingQueue<ida.ipl.Board> jobQueue;     // Job queue
     private ReceivePort receivePort;
-    private boolean useCache;
-    private Board initialBoard;
+    private ida.ipl.Board initialBoard;
 
     // Set to 1 when result found
     private int result = 0;
-    private int shortest_slides = 0;
     private int bound;
     static int expansions;
-    int count = 0;
 
 
     // Client Status Set
@@ -58,27 +55,27 @@ public class Server implements MessageUpcall{
     ArrayBlockingQueue<IbisIdentifier> computingSet;
     ArrayBlockingQueue<IbisIdentifier> doneSet;
 
-
     // Timer
     long start;
     long end;
 
-    public Server(Ibis ibis, Board initial, boolean useCache) throws Exception{
+    int count = 0;
+    public Server(Ibis ibis, ida.ipl.Board initial) throws Exception{
 
-        waitingMessageSet = new ArrayBlockingQueue<IbisIdentifier>(100);
-        computingSet = new ArrayBlockingQueue<IbisIdentifier>(100);
-        doneSet = new ArrayBlockingQueue<IbisIdentifier>(100);
-        jobQueue = new ArrayBlockingQueue<Board>(QUEUE_SIZE);
-        sendPorts = new ArrayList<SendPort>();
+        waitingMessageSet = new ArrayBlockingQueue<IbisIdentifier>(50);
+        computingSet = new ArrayBlockingQueue<IbisIdentifier>(50);
+        doneSet = new ArrayBlockingQueue<IbisIdentifier>(50);
 
         /* Assign ibis instance. */
         this.ibis = ibis;
+        sendPorts = new ArrayList<SendPort>();
+        /* Store initial board in job queue*/
+        this.initialBoard = initial;
+        jobQueue = new ArrayBlockingQueue<ida.ipl.Board>(QUEUE_SIZE);
+
         ibis.registry().waitUntilPoolClosed();
         IbisIdentifier[] joinedIbises = ibis.registry().joinedIbises();
 
-        /* Store initial board in job queue*/
-        this.initialBoard = initial;
-        this.useCache = useCache;
         // Connnect to client
         receiverConnect();
         senderConnect(joinedIbises);
@@ -88,62 +85,67 @@ public class Server implements MessageUpcall{
 
         start = System.currentTimeMillis();
         run();
-
         setFinished();
+        end = System.currentTimeMillis();
         ibis.end();
         System.err.println("ida took " + (end - start) + " milliseconds");
+        System.err.println("Server count "+ count);
     }
 
     private void run() throws IOException {
         bound = initialBoard.distance();
-        shortest_slides = bound;
         serverReady();
 
         System.out.print("Try bound ");
         System.out.flush();
 
         while (result == 0) {
-
-            expansions = 0;
             initialBoard.setBound(bound);
             jobQueue.add(initialBoard);
 
             System.out.print(bound + " ");
             System.out.flush();
 
-            Board board = jobQueue.poll();
-
-            result = solve(board,useCache);
-
+            expansions = 0;
+            count = 0;
             // Bound iteration finishes when job queue  is empty and all client done computing
-            while (!jobQueue.isEmpty()) {
+            synchronized (this) {
 
-                // Wait till client request for job
-                while(waitingMessageSet.isEmpty()){
-                    try {
-                        wait();
-                    } catch (Exception e) {
-                        // ignored
+                while (!jobQueue.isEmpty() && result == 0) {
+
+                    // Master generate job
+                    ida.ipl.Board board = jobQueue.poll();
+                    result = solve(board,true);
+
+                    // Wait till client request for job
+                    while(waitingMessageSet.isEmpty() && result == 0){
+                        try {
+                            wait();
+                        } catch (Exception e) {
+                            // ignored
+                        }
                     }
-                }
 
-                // Send job, if job Queue is not empty, and client waiting message
-                while(!jobQueue.isEmpty() && !waitingMessageSet.isEmpty()){
-                    Iterator ID_iterator = waitingMessageSet.iterator();
-                    while (ID_iterator.hasNext() && !jobQueue.isEmpty()) {
-                        IbisIdentifier target = (IbisIdentifier) ID_iterator.next();
-                        sendBoard(target);
+                    // Send job, if job Queue is not empty, and client waiting message
+                    while(!jobQueue.isEmpty() && !waitingMessageSet.isEmpty() && result == 0){
+                        Iterator ID_iterator = waitingMessageSet.iterator();
+                        while (ID_iterator.hasNext() && !jobQueue.isEmpty()) {
+                            IbisIdentifier target = (IbisIdentifier) ID_iterator.next();
+                            sendBoard(target);
+                        }
                     }
+
+                    // Wait till client finishes job
+                    while(computingSet.size() != 0 && result == 0){
+                        try {
+                            wait();
+                        } catch (Exception e) {
+                            // ignored
+                        }
+                    }
+
                 }
 
-            }
-            // Wait till client finishes job
-            while(computingSet.size() != 0){
-                try {
-                    wait();
-                } catch (Exception e) {
-                    // ignored
-                }
             }
 
             bound += 2;
@@ -164,22 +166,35 @@ public class Server implements MessageUpcall{
     @Override
     public void upcall(ReadMessage message) throws IOException, ClassNotFoundException {
         byte[] clientMessage = (byte[]) message.readObject();
+        int flag = clientMessage[clientMessage.length-1];
         IbisIdentifier identifier = message.origin().ibisIdentifier();
+        //System.err.println("Recv from:" + identifier + "Flag: "+ flag);
+        // Client send children board
 
-        // Client request for job
         if(clientMessage[clientMessage.length-1] == SEND_BOARD){
 
+            //System.err.println("===  Waiting "+ waitingMessageSet + " Computing "+ computingSet+ " Done "+ doneSet );
             done2Wait(identifier);
             wakeUp();
-
+        }
+        else if(clientMessage[clientMessage.length-1] == RECV_BOARD){
+            byte[] byteBoard = new byte[NSQRT*NSQRT + 4];
+            int count = clientMessage[clientMessage.length-2];
+            //System.err.println("Count: "+ count);
+            for(int i = 0; i < count; i++ ){
+                for(int j = 0; j < NSQRT*NSQRT + 4 ; j++){
+                    byteBoard[j] = clientMessage[(NSQRT*NSQRT + 4) * i +j];
+                }
+                ida.ipl.Board board = new ida.ipl.Board(byteBoard);
+                jobQueue.add(board);
+            }
         }
         // Result Found
         else if(clientMessage[clientMessage.length-1] == RESULT_FOUND){
             ByteBuffer buf = ByteBuffer.wrap(clientMessage);
-            result += buf.getInt(0);
-            expansions += buf.getInt(8);
+            expansions += buf.getInt(0);
             comp2Done(identifier);
-            end = System.currentTimeMillis();
+            result = clientMessage[clientMessage.length-1];
             wakeUp();
         }
         // Receive result board
@@ -187,22 +202,19 @@ public class Server implements MessageUpcall{
             System.err.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>> Gotcha!");
             byte[] byteBoard = new byte[NSQRT*NSQRT + 4];
             int count = clientMessage[clientMessage.length-2];
+            //System.err.println("Count: "+ count);
             for(int i = 0; i < count; i++ ){
                 for(int j = 0; j < NSQRT*NSQRT + 4 ; j++){
                     byteBoard[j] = clientMessage[(NSQRT*NSQRT + 4) * i +j];
                 }
-                Board board = new Board(byteBoard);
+                ida.ipl.Board board = new ida.ipl.Board(byteBoard);
                 System.err.println(board);
-                if(board.depth() < shortest_slides){
-                    shortest_slides = board.depth();
-                }
             }
-
         }
         //  Client result not found
         else if(clientMessage[clientMessage.length-1] == RESULT_NOT_FOUND){
             ByteBuffer buf = ByteBuffer.wrap(clientMessage);
-            expansions += buf.getInt(8);
+            expansions += buf.getInt(0);
             comp2Done(identifier);
             wakeUp();
         }
@@ -217,23 +229,23 @@ public class Server implements MessageUpcall{
      * @throws IOException
      */
     private synchronized void sendBoard(IbisIdentifier target) throws IOException {
-        Board board = jobQueue.poll();
+        ida.ipl.Board board = jobQueue.poll();
         //System.err.println("Queue Job Depth: " + board.depth());
         byte[] byteBoard = new byte[NSQRT*NSQRT + 5];
         byte[] byteBuffer = board.getByteBoard();
         for(int i =0;i<byteBuffer.length;i++){
             byteBoard[i] = byteBuffer[i];
         }
-        int intPrevX = board.getPrevX();
-        int intPrevY = board.getPrevY();
-        int intBound = board.bound();
-        int intDepth = board.depth();
-        int intFlag = SEND_BOARD;
-        byteBoard[NSQRT * NSQRT] = (byte) intPrevX;
-        byteBoard[NSQRT * NSQRT + 1] = (byte) intPrevY;
-        byteBoard[NSQRT * NSQRT + 2] = (byte) intBound;
-        byteBoard[NSQRT * NSQRT + 3] = (byte) intDepth;
-        byteBoard[NSQRT * NSQRT + 4] = (byte) intFlag;
+        Integer intPrevX = new Integer(board.getPrevX());
+        Integer intPrevY = new Integer(board.getPrevY());
+        Integer intBound = new Integer(board.bound());
+        Integer intDepth = new Integer(board.depth());
+        Integer intFlag = new Integer(SEND_BOARD);
+        byteBoard[NSQRT * NSQRT] = intPrevX.byteValue();
+        byteBoard[NSQRT * NSQRT + 1] = intPrevY.byteValue();
+        byteBoard[NSQRT * NSQRT + 2] = intBound.byteValue();
+        byteBoard[NSQRT * NSQRT + 3] = intDepth.byteValue();
+        byteBoard[NSQRT * NSQRT + 4] = intFlag.byteValue();
 
         for (SendPort sendPort :sendPorts){
             if((sendPort.connectedTo())[0].ibisIdentifier().equals(target)){
@@ -248,10 +260,10 @@ public class Server implements MessageUpcall{
     }
 
 
-    private synchronized int solve(Board board, boolean useCache) throws IOException {
-        BoardCache cache = null;
+    private synchronized int solve(ida.ipl.Board board, boolean useCache) throws IOException {
+        ida.ipl.BoardCache cache = null;
         if (useCache) {
-            cache = new BoardCache();
+            cache = new ida.ipl.BoardCache();
         }
         int solutions;
 
@@ -268,54 +280,65 @@ public class Server implements MessageUpcall{
      * expands this board into all possible positions, and returns the number of
      * solutions. Will cut off at the bound set in the board.
      */
-    private int solutions(Board board, BoardCache cache) throws IOException {
+    private int solutions(ida.ipl.Board board, BoardCache cache) throws IOException {
         expansions++;
-        count++;
+        count ++;
         if (board.distance() == 0) {
             System.err.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>> Gotcha!");
-            end = System.currentTimeMillis();
             System.err.println(board);
             return 1;
         }
-
 
         if (board.distance() > board.bound()) {
             return 0;
         }
 
-        Board[] children = board.makeMoves(cache, board.depth());
+        ida.ipl.Board[] children = board.makeMoves(cache, board.depth());
         int result = 0;
 
-        /*
-            Search space depth < MAXHOP
-            Else generate job and add to queue
-         */
-        if(board.depth() < MAXHOPS){
+        if(board.depth() < MAXHOP){
 
+            ida.ipl.Board targetBoard = null;
+            int best_dist = board.bound();
+
+            for (int i = 0; i < children.length; i++) {
+                if (children[i] != null && children[i].distance() < best_dist) {
+                    best_dist = children[i].distance();
+                }
+                // Cut of unqualified child
+                if(children[i] != null && children[i].distance() > children[i].bound()){
+                    children[i] = null;
+                    expansions++;
+                }
+            }
+            for (int i = 0; i < children.length; i++) {
+                if (children[i] != null && children[i].distance() == best_dist && targetBoard == null) {
+                    targetBoard = children[i];
+                    children[i] = null;
+                    break;
+                }
+            }
+            for (int i = 0; i < children.length; i++) {
+                if (children[i] != null) {
+                   jobQueue.add(children[i]);
+                }
+            }
+            if(targetBoard!=null) {
+                result += solutions(targetBoard,cache);
+            }
+        }else {
+            while(!jobQueue.isEmpty() && !waitingMessageSet.isEmpty()){
+                Iterator ID_iterator = waitingMessageSet.iterator();
+                while (ID_iterator.hasNext() && !jobQueue.isEmpty()) {
+                    IbisIdentifier target = (IbisIdentifier) ID_iterator.next();
+                    sendBoard(target);
+                }
+            }
             for (int i = 0; i < children.length; i++) {
                 if (children[i] != null) {
                     result += solutions(children[i], cache);
                 }
             }
-
-        }else if(board.depth() == MAXHOPS){
-
-            for (int i = 0; i < children.length; i++) {
-                if (children[i] != null) {
-                    jobQueue.add(children[i]);
-                    //System.err.println("Added depth: "+children[i].depth() + " Bound "+ children[i].bound());
-                }
-            }
-            //System.out.println("added");
-            while(jobQueue.size()>clientSize && !waitingMessageSet.isEmpty()){
-                Iterator ID_iterator = waitingMessageSet.iterator();
-                while (ID_iterator.hasNext() && !jobQueue.isEmpty()) {
-                    IbisIdentifier target = (IbisIdentifier) ID_iterator.next();
-                    sendBoard(target);
-                    //System.out.println("Send");
-                }
-            }
-            return 0;
         }
 
         cache.put(children);
@@ -326,9 +349,10 @@ public class Server implements MessageUpcall{
      * expands this board into all possible positions, and returns the number of
      * solutions. Will cut off at the bound set in the board.
      */
-    private int solutions(Board board) throws IOException {
+    private int solutions(ida.ipl.Board board) {
         expansions++;
         if (board.distance() == 0) {
+            System.err.println(board);
             return 1;
         }
 
@@ -338,36 +362,10 @@ public class Server implements MessageUpcall{
 
         Board[] children = board.makeMoves(board.depth());
         int result = 0;
-
-        /*
-            Search space depth < MAXHOP
-            Else generate job and add to queue
-         */
-        if(board.depth() < MAXHOPS){
-
-            for (int i = 0; i < children.length; i++) {
-                if (children[i] != null) {
-                    result += solutions(children[i]);
-                }
+        for (int i = 0; i < children.length; i++) {
+            if (children[i] != null) {
+                result += solutions(children[i]);
             }
-
-        }
-        // Generate job
-        else if(board.depth() == MAXHOPS){
-
-            for (int i = 0; i < children.length; i++) {
-                if (children[i] != null) {
-                    jobQueue.add(children[i]);
-                }
-            }
-            while(jobQueue.size()>clientSize && !waitingMessageSet.isEmpty()){
-                Iterator ID_iterator = waitingMessageSet.iterator();
-                while (ID_iterator.hasNext() && !jobQueue.isEmpty()) {
-                    IbisIdentifier target = (IbisIdentifier) ID_iterator.next();
-                    sendBoard(target);
-                }
-            }
-            return 0;
         }
         return result;
     }
@@ -442,7 +440,7 @@ public class Server implements MessageUpcall{
     private void senderConnect(IbisIdentifier[] ibisIdentifiers) throws Exception {
         for(IbisIdentifier identifier:ibisIdentifiers){
             if(!identifier.equals(ibis.identifier())){
-                SendPort sendPort = ibis.createSendPort(Ida.ONE2MANY);
+                SendPort sendPort = ibis.createSendPort(ida.ipl.Ida.ONE2MANY);
                 ReceivePortIdentifier clientPortId = sendPort.connect(identifier, "fromServer");
                 sendPorts.add(sendPort);
                 clientSize++;
@@ -455,7 +453,7 @@ public class Server implements MessageUpcall{
      * @throws IOException
      */
     private void receiverConnect() throws IOException {
-        receivePort = ibis.createReceivePort(Ida.MANY2ONE, "toServer",this);
+        receivePort = ibis.createReceivePort(ida.ipl.Ida.MANY2ONE, "toServer",this);
         // enable connections
         receivePort.enableConnections();
         // enable upcalls

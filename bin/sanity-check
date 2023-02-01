@@ -94,6 +94,3 @@ do
 	fi
 
 done
-
-cat out.0 out.1 > ipl-file.out
-cat err.0 err.1 err.2 err.3 err.4 err.5 err.6 err.7> ipl-file.err
