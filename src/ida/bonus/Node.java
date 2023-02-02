@@ -1,13 +1,11 @@
 package ida.bonus;
 
 import ibis.ipl.IbisIdentifier;
-import ibis.ipl.ReceivePortIdentifier;
 import ibis.ipl.SendPort;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.concurrent.ArrayBlockingQueue;
 
@@ -21,10 +19,9 @@ public class Node  implements MessageUpcall{
      *   Flag for client message
      **/
     static int END = -1;
-    static int REQUEST_DENY = 7;
+    static int OPEN_REQUEST = 7;
     static int SEND_BOARD = 6;
     static int RECV_BOARD = 5;
-    static int SERVER_READY = 3;
     static int RESULT_BOARD = 2;
     static int RESULT_FOUND = 1;
     static int RESULT_NOT_FOUND = 0;
@@ -42,8 +39,10 @@ public class Node  implements MessageUpcall{
     private ArrayList<ReceivePort> receivePorts;
     private Board initialBoard;
 
-    // Set to 1 when result found
+    // Total result
     private int result = 0;
+    // Local result
+    private int sovleResult = 0;
     // Set to false when result found
     private boolean running = true;
     // Current node has work to do
@@ -58,14 +57,15 @@ public class Node  implements MessageUpcall{
     ArrayBlockingQueue<IbisIdentifier> waitingMessageSet;
     ArrayBlockingQueue<IbisIdentifier> computingSet;
     ArrayBlockingQueue<IbisIdentifier> doneSet;
+
+    ArrayBlockingQueue<IbisIdentifier> workingSet;
+    ArrayBlockingQueue<IbisIdentifier> employerSet;
     ArrayBlockingQueue<IbisIdentifier> forkSet;
     ArrayBlockingQueue<IbisIdentifier> peerSet;
+    ArrayBlockingQueue<IbisIdentifier> sendPendingSet;
 
     // Coordiante state
     private boolean waitingMessage = true;
-    private boolean waitingServer = true;
-    private boolean useCache;
-    private int solveResult;
 
     // Timer
     long start;
@@ -74,10 +74,11 @@ public class Node  implements MessageUpcall{
     public Node(Ibis ibis, Board initial)throws Exception{
 
         waitingMessageSet = new ArrayBlockingQueue<IbisIdentifier>(50);
-        computingSet = new ArrayBlockingQueue<IbisIdentifier>(50);
-        doneSet = new ArrayBlockingQueue<IbisIdentifier>(50);
+        workingSet = new ArrayBlockingQueue<IbisIdentifier>(50);
         forkSet = new ArrayBlockingQueue<IbisIdentifier>(50);
         peerSet = new ArrayBlockingQueue<IbisIdentifier>(50);
+        employerSet = new ArrayBlockingQueue<IbisIdentifier>(50);
+        sendPendingSet = new ArrayBlockingQueue<IbisIdentifier>(50);
 
         /* Assign ibis instance. */
         this.ibis = ibis;
@@ -100,18 +101,17 @@ public class Node  implements MessageUpcall{
         start = System.currentTimeMillis();
         run();
         setFinished();
+        System.err.println("finished");
         end = System.currentTimeMillis();
         ibis.end();
         System.err.println("ida took " + (end - start) + " milliseconds");
     }
 
-    private void run() throws IOException, InterruptedException {
-
+    private void run() throws IOException {
 
         if(initialBoard == null){
-            broadcastMessage(0,0,SEND_BOARD);
-            // Wait till job received
-            while(jobQueue.isEmpty()){
+            // Wait till any node is open to request
+            while(workingSet.isEmpty()){
                 try {
                     wait();
                 } catch (Exception e) {
@@ -126,14 +126,35 @@ public class Node  implements MessageUpcall{
 
         }
 
-        while (result == 0) {
+
+        /*
+
+        Do not send job to employeer when still computing job from employeer
+
+
+
+         */
+        while (result == 0 && running) {
 
             if(initialBoard != null){
                 initialBoard.setBound(bound);
                 jobQueue.add(initialBoard);
                 System.out.print(bound + " ");
                 System.out.flush();
+            }else {
+                // Steal work from peer
+                IbisIdentifier target =  workingSet.poll();
+                sendMessage(0,0,SEND_BOARD,target);
+                while(waitingMessage){
+                    try {
+                        wait();
+                    } catch (Exception e) {
+                        // ignored
+                    }
+                }
             }
+            broadcastMessage(0,0,OPEN_REQUEST);
+
             expansions = 0;
 
             // Bound iteration finishes when job queue  is empty and all client done computing
@@ -141,10 +162,23 @@ public class Node  implements MessageUpcall{
 
                 while (!jobQueue.isEmpty()) {
                     Board board = jobQueue.poll();
-                    result = solve(board,true);
+                    sovleResult = solve(board,true);
+                    result += sovleResult;
                 }
-
-                // Wait till client finishes job
+                // Send job back to original fork
+                if(employerSet.size() != 0){
+                    Iterator<IbisIdentifier> ID_iterator = employerSet.iterator();
+                    while (ID_iterator.hasNext()) {
+                        IbisIdentifier target = ID_iterator.next();
+                        if(result ==0){
+                            sendMessage(result,expansions,RESULT_NOT_FOUND,target);
+                        }else {
+                            sendMessage(result,expansions,RESULT_FOUND,target);
+                        }
+                        employerSet.remove(target);
+                    }
+                }
+                // Wait till all fork finishes job
                 while(forkSet.size() != 0){
                     try {
                         wait();
@@ -152,15 +186,13 @@ public class Node  implements MessageUpcall{
                         // ignored
                     }
                 }
-
             }
 
             bound += 2;
             System.err.println("Expansions: " + expansions);
         }
-        System.out.println("\nresult is " + result + " solutions of "
+        if(initialBoard != null)System.out.println("\nresult is " + result + " solutions of "
                 + initialBoard.bound() + " steps");
-
 
     }
 
@@ -176,30 +208,31 @@ public class Node  implements MessageUpcall{
     public void upcall(ReadMessage message) throws IOException, ClassNotFoundException {
         byte[] peerMessage = (byte[]) message.readObject();
         IbisIdentifier identifier = message.origin().ibisIdentifier();
-
         // Client request for job
         if(peerMessage[peerMessage.length-1] == SEND_BOARD){
-            if(working||!jobQueue.isEmpty()){
-                done2Wait(identifier);
-                wakeUp();
-            }else {
+            if(working && !waitingMessageSet.contains(identifier)){
+                waitingMessageSet.add(identifier);
             }
-
+        }
+        else if(peerMessage[peerMessage.length-1] == OPEN_REQUEST){
+            if(!workingSet.contains(identifier)){
+                workingSet.add(identifier);
+            }
+            System.err.println(identifier + " is open");
+            wakeUp();
         }
         else if(peerMessage[peerMessage.length-1] == RECV_BOARD){
+            waitingMessage = false;
             Board newboard = new Board(peerMessage);
             jobQueue.add(newboard);
-            if(peerSet.isEmpty()){
-                peerSet.add(identifier);
-            }
-            System.err.println(newboard);
+            employerSet.add(identifier);
         }
         // Result Found
         else if(peerMessage[peerMessage.length-1] == RESULT_FOUND){
             ByteBuffer buf = ByteBuffer.wrap(peerMessage);
             result += buf.getInt(0);
             expansions += buf.getInt(8);
-            comp2Done(identifier);
+            forkSet.remove(identifier);
             end = System.currentTimeMillis();
             wakeUp();
         }
@@ -219,19 +252,22 @@ public class Node  implements MessageUpcall{
                 }
             }
         }
-        //  Client result not found
+        //  Peer work result not found
         else if(peerMessage[peerMessage.length-1] == RESULT_NOT_FOUND){
             ByteBuffer buf = ByteBuffer.wrap(peerMessage);
             expansions += buf.getInt(8);
-            comp2Done(identifier);
+            forkSet.remove(identifier);
+            wakeUp();
+        }// END signal
+        else if(peerMessage[peerMessage.length-1] == END){
+            running = false;
             wakeUp();
         }
-
 
         message.finish();
     }
 
-    
+
 
     /**
      * Send pending board on jobqueue to target client
@@ -240,7 +276,6 @@ public class Node  implements MessageUpcall{
      */
     private synchronized void sendBoard(IbisIdentifier target) throws IOException {
         Board board = jobQueue.poll();
-        //System.err.println("Queue Job Depth: " + board.depth());
         byte[] byteBoard = new byte[NSQRT*NSQRT + 5];
         byte[] byteBuffer = board.getByteBoard();
         for(int i =0;i<byteBuffer.length;i++){
@@ -258,13 +293,14 @@ public class Node  implements MessageUpcall{
         byteBoard[NSQRT * NSQRT + 4] = intFlag.byteValue();
 
         for (SendPort sendPort :sendPorts){
-            if((sendPort.connectedTo())[0].ibisIdentifier().equals(target)){
-                WriteMessage w = sendPort.newMessage();
-                w.writeArray(byteBoard);
-                w.finish();
-                forkSet.add(target);
-                wait2Comp(target);
-                System.err.println("SEND to "+ target );
+            for(int i = 0; i < sendPort.connectedTo().length; i++){
+                if((sendPort.connectedTo())[i].ibisIdentifier().equals(target)){
+                    WriteMessage w = sendPort.newMessage();
+                    w.writeArray(byteBoard);
+                    w.finish();
+                    forkSet.add(target);
+                    System.err.println("SEND to "+ target );
+                }
             }
         }
     }
@@ -292,13 +328,36 @@ public class Node  implements MessageUpcall{
                 WriteMessage w = sendPort.newMessage();
                 w.writeArray(bytes);
                 w.finish();
-                System.err.println(sendPort.connectedTo());
             }
             waitingMessage = true;
         }
     }
 
-    private synchronized int solve(Board board, boolean useCache) throws IOException {
+    private synchronized void sendMessage(int result, int expansion,int flag,IbisIdentifier target) throws IOException {
+        // result + expansion + flag
+        byte[] bytes = new byte[24];
+
+        ByteBuffer buf = ByteBuffer.wrap(bytes);
+        Integer flagInt = flag;
+        byte flagByte = flagInt.byteValue();
+        buf.putInt(result);
+        buf.putInt(8,expansion);
+        buf.put(bytes.length-1,flagByte);
+
+        if (running) {
+            for (SendPort sendPort :sendPorts){
+                if((sendPort.connectedTo())[0].ibisIdentifier().equals(target)){
+                    WriteMessage w = sendPort.newMessage();
+                    w.writeArray(bytes);
+                    w.finish();
+                    waitingMessage = true;
+                    System.err.println("Send to " + target + "  " +result + " FLag" + flag);
+                }
+            }
+        }
+    }
+
+    private int solve(Board board, boolean useCache) throws IOException {
         BoardCache cache = null;
         working = true;
         if (useCache) {
@@ -324,6 +383,11 @@ public class Node  implements MessageUpcall{
         if (board.distance() == 0) {
             System.err.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>> Gotcha!");
             System.err.println(board);
+            /*
+            Board[] result = new Board[1];
+            result[0] = board;
+            sendResultBoard(result,RESULT_BOARD);
+             */
             return 1;
         }
 
@@ -331,17 +395,10 @@ public class Node  implements MessageUpcall{
             return 0;
         }
 
-        if(jobQueue.size() != 0 && !waitingMessageSet.isEmpty()){
-            Iterator ID_iterator = waitingMessageSet.iterator();
-            while (ID_iterator.hasNext() && !jobQueue.isEmpty()) {
-                IbisIdentifier target = (IbisIdentifier) ID_iterator.next();
-                sendBoard(target);
-            }
-        }
         Board[] children = board.makeMoves(cache, board.depth());
-        int result = 0;
+        int solutions = 0 ;
 
-        if(board.depth() < MAXHOP){
+        if(!waitingMessageSet.isEmpty() && jobQueue.size() <= 4){
 
             Board targetBoard = null;
             int best_dist = board.bound();
@@ -368,19 +425,27 @@ public class Node  implements MessageUpcall{
                     jobQueue.add(children[i]);
                 }
             }
-            if(targetBoard!=null) {
-                result += solutions(targetBoard,cache);
+            while(!waitingMessageSet.isEmpty() && !jobQueue.isEmpty()) {
+                IbisIdentifier target = waitingMessageSet.poll();
+                sendBoard(target);
             }
+
+
+            if(targetBoard!=null) {
+                solutions += solutions(targetBoard,cache);
+            }
+
         }else {
             for (int i = 0; i < children.length; i++) {
                 if (children[i] != null) {
-                    result += solutions(children[i], cache);
+                    solutions += solutions(children[i], cache);
                 }
             }
         }
 
+
         cache.put(children);
-        return result;
+        return solutions;
     }
 
     /**
@@ -399,64 +464,23 @@ public class Node  implements MessageUpcall{
         }
 
         Board[] children = board.makeMoves(board.depth());
-        int result = 0;
+        int solutions = 0;
         for (int i = 0; i < children.length; i++) {
             if (children[i] != null) {
-                result += solutions(children[i]);
+                solutions += solutions(children[i]);
             }
         }
-        return result;
+        return solutions;
     }
 
 
 
     public void setFinished() throws IOException {
-        for (SendPort sendPort :sendPorts){
-            byte[] bytes = new byte[1];
-            Integer intResult = new Integer(END);
-            bytes[0] = intResult.byteValue();
-            WriteMessage w = sendPort.newMessage();
-            w.writeArray(bytes);
-            w.finish();
-        }
+        broadcastMessage(0,0,END);
+        running = false;
 
-        for (SendPort sendPort :sendPorts){
-            // Close ports.
-            sendPort.close();
-        }
+        System.err.println("finish called");
 
-        // Close receive port.
-        for (ReceivePort receivePort :receivePorts){
-            // Close ports.
-            receivePort.close();
-        }
-    }
-
-    /**
-     * Move target from waiting set to computing set
-     * @param target
-     */
-    synchronized void wait2Comp(IbisIdentifier target){
-        waitingMessageSet.remove(target);
-        computingSet.add(target);
-    }
-
-    /**
-     * Move target from computing set to done set
-     * @param target
-     */
-    synchronized void comp2Done(IbisIdentifier target){
-        computingSet.remove(target);
-        doneSet.add(target);
-    }
-
-    /**
-     * Move target from waiting set to computing set
-     * @param target
-     */
-    synchronized void done2Wait(IbisIdentifier target){
-        doneSet.remove(target);
-        waitingMessageSet.add(target);
     }
 
     synchronized void wakeUp(){
