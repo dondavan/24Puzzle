@@ -1,17 +1,6 @@
-Ibis server running on 192.168.0.102-8888#ae.14.5b.a3.58.7e.00.00.37.7b.e4.b6.78.c2.36.fd~thhugh+22
+Ibis server running on 192.168.0.102-8888#12.93.b8.db.58.7e.00.00.97.0a.1d.87.fa.a8.22.71~thhugh+22
 List of Services:
     Central Registry service on virtual port 302
     Management service on virtual port 304
     Bootstrap service on virtual port 303
-Known hubs now: 192.168.0.102-8888#ae.14.5b.a3.58.7e.00.00.37.7b.e4.b6.78.c2.36.fd~thhugh+22
-01:38:07 Central Registry: creating new pool: "pool53308"
-01:38:07 Central Registry: (Ibis 0, location localhost) joined pool "pool53308" now 1 members
-01:38:07 Central Registry: (Ibis 1, location localhost) joined pool "pool53308" now 2 members
-01:38:07 Central Registry: pool "pool53308" now closed
-01:38:07 Central Registry: (Ibis 1, location localhost) won election "StartNode" in pool "pool53308"
-01:38:11 ERROR [server connection handler] ibis.ipl.registry.central.server.ServerConnectionHandler - error on handling connection
-java.lang.Exception: pool pool14017 not found
-	at ibis.ipl.registry.central.server.ServerConnectionHandler.handleHeartbeat(ServerConnectionHandler.java:393)
-	at ibis.ipl.registry.central.server.ServerConnectionHandler.run(ServerConnectionHandler.java:523)
-	at ibis.util.ThreadPool$PoolThread.run(ThreadPool.java:136)
-01:38:19 Central Registry: (Ibis 0, location localhost) left pool "pool53308" now 1 members
+Known hubs now: 192.168.0.102-8888#12.93.b8.db.58.7e.00.00.97.0a.1d.87.fa.a8.22.71~thhugh+22

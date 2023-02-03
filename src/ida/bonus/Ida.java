@@ -11,11 +11,11 @@ final class Ida {
 
     static int expansions;
 
-    static PortType MANY2ONE = new PortType(
+    static PortType ONE2ONE = new PortType(
             PortType.COMMUNICATION_RELIABLE,
             PortType.SERIALIZATION_OBJECT,
             PortType.RECEIVE_AUTO_UPCALLS,
-            PortType.CONNECTION_MANY_TO_ONE);
+            PortType.CONNECTION_ONE_TO_ONE);
 
     static PortType ONE2MANY = new PortType(
             PortType.COMMUNICATION_RELIABLE,
@@ -32,7 +32,7 @@ final class Ida {
 
     public static void run(Board initial, boolean cache) throws Exception {
         // Create an ibis instance.
-        ibis.ipl.Ibis ibis = IbisFactory.createIbis(ibisCapabilities, null,MANY2ONE,ONE2MANY);
+        ibis.ipl.Ibis ibis = IbisFactory.createIbis(ibisCapabilities, null,ONE2ONE,ONE2MANY);
         ibis.registry().waitUntilPoolClosed();
         // Elect a server
         IbisIdentifier serverId = ibis.registry().elect("StartNode");
