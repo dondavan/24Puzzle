@@ -11,7 +11,7 @@ import java.util.List;
 
 final class Ida {
 
-    static PortType ONE2MANY = new PortType(
+    static PortType ONE2ONE = new PortType(
             PortType.COMMUNICATION_RELIABLE,
             PortType.SERIALIZATION_OBJECT,
             PortType.RECEIVE_AUTO_UPCALLS,
@@ -32,7 +32,7 @@ final class Ida {
 
     public static void run(Board initial,boolean cache) throws Exception {
         // Create an ibis instance.
-        ibis.ipl.Ibis ibis = IbisFactory.createIbis(ibisCapabilities, null,ONE2MANY,MANY2ONE);
+        ibis.ipl.Ibis ibis = IbisFactory.createIbis(ibisCapabilities, null,ONE2ONE,MANY2ONE);
         ibis.registry().waitUntilPoolClosed();
         // Elect a server
         IbisIdentifier serverId = ibis.registry().elect("Server");

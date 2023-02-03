@@ -23,17 +23,17 @@ public class Node  implements MessageUpcall{
     static int WORK_DONE = 8;
 
     static int OPEN_REQUEST = 7;
-    static int CLOSE_REQUEST = 4;
+    static int CLOSE_REQUEST = 6;
+    static int DENY_REQUEST = 5;
 
-    static int RETURN_BOARD = 6;
-    static int RECV_BOARD = 5;
-    static int RESULT_BOARD = 2;
+    static int RECV_BOARD = 3;
+    static int SEND_BOARD = 2;
     static int RESULT_FOUND = 1;
     static int RESULT_NOT_FOUND = 0;
 
-    static int MAXHOP = 8;
-    static int PREHOP = 8;
-    static int CHUCKSIZE = 20;
+    static int MAXHOP = 20;
+    static int PREHOP = 6;
+    static int CHUCKSIZE = 5;
 
 
     //Ibis properties
@@ -43,8 +43,6 @@ public class Node  implements MessageUpcall{
     static int QUEUE_SIZE = 10000;
     private ArrayList<SendPort> sendPorts;          // Save send port to client
     private ArrayBlockingQueue<Board> jobQueue;     // Job queue
-    private ArrayBlockingQueue<Board> pushQueue;    // Push queue
-    private ArrayBlockingQueue<IbisIdentifier> pushIDQueue;      // Push queue
     private ArrayList<ReceivePort> receivePorts;
     private Board initialBoard;
 
@@ -54,14 +52,9 @@ public class Node  implements MessageUpcall{
     private int sovleResult = 0;
     // Set to false when result found
     private boolean running = true;
-    // Current node has work to do
-    private boolean working = false;
     // If current node is employee;
     private boolean employee = false;
     private int shortest_slides = 0;
-    int highest_level;
-    int lowest_level;
-    IbisIdentifier highest_parent;
     private int bound;
     private int level;
     static int expansions;
@@ -69,15 +62,16 @@ public class Node  implements MessageUpcall{
 
     // Client Status Set
     int clientSize = 0;
-    int readyPeer = 0;
+    ArrayBlockingQueue<IbisIdentifier> readySet;
+    ArrayBlockingQueue<IbisIdentifier> stealSet;
     ArrayBlockingQueue<IbisIdentifier> waitingMessageSet;
+    ArrayBlockingQueue<IbisIdentifier> denyMessageSet;
     ArrayBlockingQueue<Integer> doneSet;
     ArrayBlockingQueue<IbisIdentifier> employerSet;
     ArrayBlockingQueue<IbisIdentifier> forkSet;
     ArrayBlockingQueue<IbisIdentifier> peerSet;
 
     // Coordiante state
-    private boolean waitingMessage = true;
     private boolean waitingJob = true;
 
     // Timer
@@ -86,6 +80,9 @@ public class Node  implements MessageUpcall{
 
     public Node(Ibis ibis, Board initial)throws Exception{
 
+        readySet = new ArrayBlockingQueue<IbisIdentifier>(50);
+        stealSet = new ArrayBlockingQueue<IbisIdentifier>(50);
+        denyMessageSet = new ArrayBlockingQueue<IbisIdentifier>(50);
         waitingMessageSet = new ArrayBlockingQueue<IbisIdentifier>(50);
         doneSet = new ArrayBlockingQueue<Integer>(50);
         forkSet = new ArrayBlockingQueue<IbisIdentifier>(50);
@@ -100,32 +97,30 @@ public class Node  implements MessageUpcall{
         /* Store initial board in job queue*/
         this.initialBoard = initial;
         jobQueue = new ArrayBlockingQueue<Board>(QUEUE_SIZE);
-        pushQueue = new ArrayBlockingQueue<Board>(1000);
-        pushIDQueue = new ArrayBlockingQueue<IbisIdentifier>(1000);
-
         ibis.registry().waitUntilPoolClosed();
         IbisIdentifier[] joinedIbises = ibis.registry().joinedIbises();
 
         // Connnect to other peers
         portInit(joinedIbises);
 
-        System.err.println("This " + ibis.identifier());
-        System.out.println("Running IDA*, initial board:");
-        System.out.println(initialBoard);
+        if(initialBoard!=null){
+            System.out.println("Running IDA*, initial board:");
+            System.out.println(initialBoard);
+        }
 
-        /*
         broadcastMessage(0,0,PEER_READY);
-        while(readyPeer < joinedIbises.length -1){
+        // Wait till all peers are ready
+        while(readySet.size() < joinedIbises.length -1){
             try {
                 wait();
             } catch (Exception e) {
                 // ignored
             }
-        }*/
+        }
         start = System.currentTimeMillis();
         run();
         end = System.currentTimeMillis();
-        System.err.println("ida took " + (end - start) + " milliseconds");
+        if(initialBoard != null) System.err.println("ida took " + (end - start) + " milliseconds");
         ibis.end();
     }
 
@@ -140,8 +135,6 @@ public class Node  implements MessageUpcall{
         while (running) {
             // Node only give work to level <= its level
             level = 0;
-            highest_level = 0;
-            lowest_level = 0;
             int local_result = 0;
 
             if(initialBoard != null){
@@ -150,35 +143,33 @@ public class Node  implements MessageUpcall{
                 System.out.print(bound + " ");
                 System.out.flush();
             }else {
+                // Steal job from other
                 waitingJob = true;
-                broadcastMessage(level,0,OPEN_REQUEST);
                 while(waitingJob && running){
                     try {
-                        broadcastMessage(level,0,OPEN_REQUEST);
-                        Thread.sleep(10);
+                        while (!stealSet.isEmpty()){
+                            System.err.println("Requested " + stealSet.peek());
+                            sendMessage(0,0,SEND_BOARD,stealSet.poll());
+                        }
                     } catch (Exception e) {
                         // ignored
                     }
-                }
-                broadcastMessage(level,0,CLOSE_REQUEST);
-                System.err.println("Got it**********************");
-                // Return Extra Board
-                while(!pushQueue.isEmpty()){
-                    Board board = pushQueue.poll();
-                    IbisIdentifier id = pushIDQueue.poll();
-                    sendBoard(board,id,RETURN_BOARD);
                 }
             }
 
             expansions = 0;
 
+            broadcastMessage(level,0,OPEN_REQUEST);
             // Bound iteration finishes when job queue  is empty and all client done computing
-            while (!jobQueue.isEmpty() && running) {
+            while (!jobQueue.isEmpty()) {
                 Board board = jobQueue.poll();
                 sovleResult = solve(board,true);
                 local_result += sovleResult;
             }
+            broadcastMessage(level,0,CLOSE_REQUEST);
 
+
+            result += local_result;
 
             // Send job back to original fork
             while(employerSet.size() != 0){
@@ -187,32 +178,22 @@ public class Node  implements MessageUpcall{
                 if(local_result ==0){
                     sendMessage(local_result,expansions,RESULT_NOT_FOUND,target);
                 }else {
-                    // if result found, only send result value to highest parent
-                    if(target == highest_parent) sendMessage(result,expansions,RESULT_FOUND,target);
-                    else sendMessage(0,expansions,RESULT_FOUND,target);
+                    sendMessage(0,expansions,RESULT_FOUND,target);
                 }
             }
 
-            result += local_result;
-
+            // If im the root and found result, tell everyone to stop
             if(!employee && result != 0){
                 running =false;
-                // Wait till all fork finishes job
-                while(forkSet.size() != 0){
-                    try {
-                        wait();
-                    } catch (Exception e) {
-                        // ignored
-                    }
-                }
                 broadcastMessage(0,0,END);
             }
 
             bound += 2;
             System.err.println("Expansions: " + expansions);
         }
+        end = System.currentTimeMillis();
+        System.err.println("Found at " + (end - start) + " milliseconds");
         broadcastMessage(result,0,WORK_DONE);
-
         // Gather job from peer
         while(doneSet.size() != clientSize){
             try {
@@ -222,7 +203,7 @@ public class Node  implements MessageUpcall{
             }
         }
         while (!doneSet.isEmpty())result+=doneSet.poll();
-        System.err.println("Result "+ result);
+        //System.err.println("Result "+ result);
         if(initialBoard != null)System.out.println("\nresult is " + result + " solutions of "
                 + initialBoard.bound() + " steps");
 
@@ -240,41 +221,38 @@ public class Node  implements MessageUpcall{
     public void upcall(ReadMessage message) throws IOException, ClassNotFoundException {
         byte[] peerMessage = (byte[]) message.readObject();
         IbisIdentifier identifier = message.origin().ibisIdentifier();
+
         // Client request for job
         // Won't save work request from employer
         if(peerMessage[peerMessage.length-1] == CLOSE_REQUEST){
-            waitingMessageSet.remove(identifier);
+            stealSet.remove(identifier);
             wakeUp();
         }
-        // Prevent deadlock
+        // IF any peer is open to be stealed from
         else if(peerMessage[peerMessage.length-1] == OPEN_REQUEST){
             ByteBuffer buf = ByteBuffer.wrap(peerMessage);
             int peer_level = buf.getInt(0);
-            if( (peer_level > level || peer_level == level)
-                    && !jobQueue.isEmpty() && !waitingMessageSet.contains(identifier)) waitingMessageSet.add(identifier);
+            if( (peer_level > level || peer_level == level) )stealSet.add(identifier);
+            wakeUp();
+        }
+        // IF requested client is qualified, send job to target client
+        else if(peerMessage[peerMessage.length-1] == SEND_BOARD){
+            ByteBuffer buf = ByteBuffer.wrap(peerMessage);
+            int peer_level = buf.getInt(0);
+            if( (peer_level > level || peer_level == level))waitingMessageSet.add(identifier);
+            else denyMessageSet.add(identifier);
+            wakeUp();
+        }// IF receieved DENY, remove request target from steal list
+        else if(peerMessage[peerMessage.length-1] == DENY_REQUEST){
+            stealSet.remove(identifier);
             wakeUp();
         }
         else if(peerMessage[peerMessage.length-1] == RECV_BOARD){
             Board newboard = new Board(peerMessage);
-            if(employerSet.isEmpty()) {
-                employerSet.add(identifier);
-                level = peerMessage[NSQRT * NSQRT + 4] + 1;
-            }
-            if(employerSet.isEmpty() || employerSet.contains(identifier)){
-                jobQueue.add(newboard);
-            }else {
-                pushQueue.add(newboard);
-                pushIDQueue.add(identifier);
-                System.err.println(pushQueue.peek() + "  "+ pushIDQueue.peek() + " Ori "+ identifier);
-            }
-
-            waitingJob = false;
-        }
-        // Push return board back to queue
-        else if(peerMessage[peerMessage.length-1] == RETURN_BOARD){
-            System.err.println("Pushed " + identifier);
-            Board newboard = new Board(peerMessage);
+            if(!employerSet.contains(identifier))employerSet.add(identifier);
+            level = peerMessage[NSQRT * NSQRT + 4] + 1;
             jobQueue.add(newboard);
+            waitingJob = false;
         }
         // Won't save work request from employer
         else if(peerMessage[peerMessage.length-1] == WORK_DONE){
@@ -286,8 +264,6 @@ public class Node  implements MessageUpcall{
         else if(peerMessage[peerMessage.length-1] == RESULT_FOUND){
             ByteBuffer buf = ByteBuffer.wrap(peerMessage);
             result += buf.getInt(0);
-            expansions += buf.getInt(8);
-            System.err.println("Recv "+ buf.getInt(0) + " from "+ identifier+"=========================");
             forkSet.remove(identifier);
             end = System.currentTimeMillis();
             wakeUp();
@@ -295,17 +271,15 @@ public class Node  implements MessageUpcall{
         //  Peer work result not found
         else if(peerMessage[peerMessage.length-1] == RESULT_NOT_FOUND){
             ByteBuffer buf = ByteBuffer.wrap(peerMessage);
-            expansions += buf.getInt(8);
             forkSet.remove(identifier);
             wakeUp();
         }// END signal
         else if(peerMessage[peerMessage.length-1] == END){
             running = false;
-            waitingMessage = false;
             wakeUp();
         }
         else if(peerMessage[peerMessage.length-1] == PEER_READY){
-            readyPeer++;
+            readySet.add(identifier);
             wakeUp();
         }
 
@@ -342,7 +316,6 @@ public class Node  implements MessageUpcall{
                 w.writeArray(byteBoard);
                 w.finish();
                 if(!forkSet.contains(target))forkSet.add(target);
-                //System.err.println("Board Send to "+target);
             }
         }
     }
@@ -370,7 +343,6 @@ public class Node  implements MessageUpcall{
                 w.writeArray(bytes);
                 w.finish();
             }
-            waitingMessage = true;
         }catch (IOException e){
             // nothing
         }
@@ -388,21 +360,17 @@ public class Node  implements MessageUpcall{
         buf.putInt(8,expansion);
         buf.put(bytes.length-1,flagByte);
 
-        if (running) {
-            for (SendPort sendPort :sendPorts){
-                if((sendPort.connectedTo())[0].ibisIdentifier().equals(target)){
-                    WriteMessage w = sendPort.newMessage();
-                    w.writeArray(bytes);
-                    w.finish();
-                    System.err.println("Message sent to "+ target +" Result " +result +" Flag "+flag);
-                }
+        for (SendPort sendPort :sendPorts){
+            if((sendPort.connectedTo())[0].ibisIdentifier().equals(target)){
+                WriteMessage w = sendPort.newMessage();
+                w.writeArray(bytes);
+                w.finish();
             }
         }
     }
 
     private int solve(Board board, boolean useCache) throws IOException {
         BoardCache cache = null;
-        working = true;
         if (useCache) {
             cache = new BoardCache();
         }
@@ -423,7 +391,6 @@ public class Node  implements MessageUpcall{
      */
     private int solutions(Board board, BoardCache cache) throws IOException {
         expansions++;
-        if(!running)return 0;
         if (board.distance() == 0) {
             System.err.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>> Gotcha!");
             System.err.println(board);
@@ -442,7 +409,13 @@ public class Node  implements MessageUpcall{
         Board[] children = board.makeMoves(cache, board.depth());
         int solutions = 0 ;
 
-        if((!waitingMessageSet.isEmpty() && jobQueue.size() <= waitingMessageSet.size() && board.depth() < MAXHOP) || board.depth() < PREHOP){
+
+        while (!denyMessageSet.isEmpty()){
+            IbisIdentifier target = denyMessageSet.poll();
+            sendMessage(0,0,DENY_REQUEST,target);
+        }
+
+        if((!waitingMessageSet.isEmpty() && jobQueue.size() <= waitingMessageSet.size()) || board.depth() < PREHOP){
 
             Board targetBoard = null;
             int best_dist = board.bound();
@@ -470,6 +443,10 @@ public class Node  implements MessageUpcall{
                 }
             }
 
+            /*
+            while (!waitingMessageSet.isEmpty() && !jobQueue.isEmpty())
+                sendBoard(jobQueue.poll(), waitingMessageSet.poll(), RECV_BOARD);
+*/
             while(!waitingMessageSet.isEmpty()) {
                 IbisIdentifier target = waitingMessageSet.poll();
                 int i =0;

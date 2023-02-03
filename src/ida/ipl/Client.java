@@ -295,7 +295,7 @@ public class Client implements MessageUpcall {
     private void receiverConnect() throws Exception{
         // Create a receive port, pass ourselves as the message upcall
         // handler
-        receiver = ibis.createReceivePort(Ida.ONE2MANY, "fromServer",this);
+        receiver = ibis.createReceivePort(Ida.ONE2ONE, "fromServer",this);
         // enable connections
         receiver.enableConnections();
         // enable upcalls

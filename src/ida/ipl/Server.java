@@ -438,7 +438,7 @@ public class Server implements MessageUpcall{
     private void senderConnect(IbisIdentifier[] ibisIdentifiers) throws Exception {
         for(IbisIdentifier identifier:ibisIdentifiers){
             if(!identifier.equals(ibis.identifier())){
-                SendPort sendPort = ibis.createSendPort(Ida.ONE2MANY);
+                SendPort sendPort = ibis.createSendPort(Ida.ONE2ONE);
                 ReceivePortIdentifier clientPortId = sendPort.connect(identifier, "fromServer");
                 sendPorts.add(sendPort);
                 clientSize++;
